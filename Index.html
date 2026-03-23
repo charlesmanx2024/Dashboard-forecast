@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Dashboard Forecast</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #070b14; --surface: #0d1420; --surface2: #131c2e; --surface3: #1a2540;
+  --border: #1e2d47; --accent: #3b82f6; --accent2: #8b5cf6;
+  --text: #e2e8f0; --muted: #4a6080; --muted2: #2a3d5a;
+  --c-bodega: #f59e0b; --c-nave: #8b5cf6; --c-tgn: #ef4444;
+  --c-sai: #06b6d4; --c-desp: #10b981; --c-elim: #6b7280;
+  --green: #10b981; --green-bg: #0d2b1a; --green-border: #276749;
+}
+body { background: var(--bg); color: var(--text); font-family: 'Space Grotesk', sans-serif; min-height: 100vh; }
+body::before { content:''; position:fixed; inset:0; background: radial-gradient(ellipse 80% 60% at 20% 10%, rgba(59,130,246,0.06) 0%, transparent 60%), radial-gradient(ellipse 60% 40% at 80% 80%, rgba(139,92,246,0.05) 0%, transparent 60%); pointer-events:none; z-index:0; }
+
+/* HEADER */
+.header { background:rgba(13,20,32,0.95); border-bottom:1px solid var(--border); padding:14px 16px; display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:100; backdrop-filter:blur(12px); }
+.header-icon { font-size:20px; }
+.header-title { font-size:15px; font-weight:700; color:#fff; letter-spacing:-0.3px; }
+.header-sub { font-size:10px; color:var(--muted); letter-spacing:0.5px; text-transform:uppercase; }
+.header-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+.live-dot { width:7px; height:7px; border-radius:50%; background:var(--c-desp); animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.total-pill { background:var(--surface2); border:1px solid var(--border); border-radius:20px; padding:4px 10px; font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace; }
+.reload-btn { background:var(--surface2); border:1px solid var(--border); color:var(--muted); font-size:13px; padding:5px 11px; border-radius:6px; cursor:pointer; font-family:inherit; }
+
+/* LOAD */
+.load-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:80vh; padding:32px; text-align:center; gap:20px; position:relative; z-index:1; }
+.load-icon { font-size:56px; }
+.load-title { font-size:20px; font-weight:700; color:#fff; }
+.load-sub { font-size:13px; color:var(--muted); line-height:1.6; }
+.btn-load { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; font-weight:700; font-size:14px; padding:13px 28px; border-radius:10px; border:none; cursor:pointer; font-family:inherit; display:flex; align-items:center; gap:8px; box-shadow:0 4px 20px rgba(59,130,246,0.3); }
+.btn-load:active { opacity:0.85; }
+.file-hint { font-size:11px; color:var(--muted); }
+
+/* MAIN */
+.main { position:relative; z-index:1; padding-bottom:60px; }
+
+/* FILTERS */
+.filters-section { background:var(--surface); border-bottom:1px solid var(--border); padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
+.filters-title { font-size:10px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:2px; }
+.filter-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.filter-group { display:flex; flex-direction:column; gap:4px; }
+.filter-label { font-size:9px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
+.select-wrap { position:relative; }
+.select-wrap::after { content:"▾"; position:absolute; right:8px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none; font-size:11px; }
+select { width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:7px 24px 7px 9px; border-radius:7px; font-size:12px; font-family:inherit; appearance:none; -webkit-appearance:none; cursor:pointer; }
+select:focus { outline:none; border-color:var(--accent); }
+.filter-actions { display:flex; gap:8px; margin-top:2px; }
+.btn-apply { flex:1; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; font-weight:700; font-size:12px; padding:9px; border-radius:8px; border:none; cursor:pointer; font-family:inherit; }
+.btn-reset-f { background:var(--surface2); border:1px solid var(--border); color:var(--muted); font-size:12px; padding:9px 14px; border-radius:8px; cursor:pointer; font-family:inherit; }
+
+/* KPIs */
+.kpi-row { display:flex; gap:8px; padding:12px 14px; overflow-x:auto; }
+.kpi-row::-webkit-scrollbar { display:none; }
+.kpi-card { flex-shrink:0; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px 14px; min-width:90px; display:flex; flex-direction:column; gap:3px; position:relative; overflow:hidden; cursor:pointer; transition:border-color 0.15s; }
+.kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--kpi-color,var(--accent)); }
+.kpi-card.active { border-color:var(--kpi-color,var(--accent)); background:var(--surface2); }
+.kpi-val { font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:600; color:var(--kpi-color,#fff); line-height:1; }
+.kpi-label { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
+
+/* SECTION */
+.section { padding:0 14px; margin-top:16px; }
+.section-header { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+.section-title { font-size:11px; font-weight:700; color:var(--text); text-transform:uppercase; letter-spacing:0.8px; }
+.section-count { font-size:10px; color:var(--muted); font-family:'JetBrains Mono',monospace; background:var(--surface2); padding:2px 7px; border-radius:10px; }
+.chart-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; }
+.chart-wrap { position:relative; width:100%; }
+
+/* TREEMAP */
+.treemap-grid { display:flex; flex-wrap:wrap; gap:3px; border-radius:8px; overflow:hidden; }
+.treemap-cell { display:flex; align-items:flex-end; justify-content:flex-start; padding:5px 6px; border-radius:4px; cursor:default; transition:opacity 0.15s; position:relative; overflow:hidden; min-height:44px; }
+.treemap-cell:hover { opacity:0.85; }
+.treemap-size { font-size:9px; font-weight:700; color:rgba(255,255,255,0.9); font-family:'JetBrains Mono',monospace; line-height:1.2; }
+.treemap-pat  { font-size:8px; color:rgba(255,255,255,0.6); line-height:1; }
+.treemap-count { position:absolute; top:4px; right:5px; font-size:10px; font-weight:700; color:rgba(255,255,255,0.8); font-family:'JetBrains Mono',monospace; }
+
+/* ORDERS PANEL */
+.orders-panel { display:flex; flex-wrap:wrap; gap:6px; }
+.order-chip {
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:6px 12px; display:flex; align-items:center; gap:8px; cursor:pointer;
+  transition:border-color 0.15s;
+}
+.order-chip:hover { border-color:var(--accent); }
+.order-chip.sin-orden { border-style:dashed; border-color:var(--muted2); }
+.order-chip-num { font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600; color:var(--accent); }
+.order-chip-num.sin { color:var(--muted); font-style:italic; }
+.order-chip-count { font-size:10px; color:var(--muted); background:var(--surface3); padding:2px 6px; border-radius:10px; font-family:'JetBrains Mono',monospace; }
+
+/* TABLE */
+.table-toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.sort-btns { display:flex; gap:4px; flex-wrap:wrap; }
+.sort-btn {
+  font-size:10px; font-weight:600; padding:4px 9px; border-radius:6px; border:1px solid var(--border);
+  cursor:pointer; font-family:inherit; color:var(--muted); background:var(--surface2);
+  display:flex; align-items:center; gap:3px; white-space:nowrap; transition:all 0.15s;
+}
+.sort-btn.active { color:#fff; border-color:var(--kpi-color,var(--accent)); background:rgba(59,130,246,0.15); }
+.sort-btn .dot { width:6px; height:6px; border-radius:50%; background:var(--kpi-color,var(--accent)); }
+
+.copy-bar { display:flex; align-items:center; gap:8px; margin-top:8px; }
+.btn-copy-sel { background:var(--green-bg); border:1px solid var(--green-border); color:var(--green); font-size:11px; font-weight:600; padding:6px 12px; border-radius:7px; cursor:pointer; font-family:inherit; display:none; }
+.btn-copy-sel:active { opacity:0.7; }
+.btn-clear-sel { background:transparent; border:1px solid var(--green-border); color:var(--green); font-size:11px; padding:6px 10px; border-radius:7px; cursor:pointer; font-family:inherit; display:none; }
+.sel-info { font-size:11px; color:var(--green); font-family:'JetBrains Mono',monospace; }
+
+.table-wrap { overflow-x:auto; border-radius:8px; border:1px solid var(--border); margin-top:8px; }
+table { width:100%; border-collapse:collapse; font-size:11px; }
+thead { background:var(--surface2); position:sticky; top:0; }
+th { padding:5px 8px; text-align:left; font-size:9px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap; border-bottom:1px solid var(--border); }
+td { padding:4px 8px; border-bottom:1px solid var(--muted2); color:var(--text); white-space:nowrap; }
+tr:last-child td { border-bottom:none; }
+tr.selected-row td { background:var(--green-bg); }
+tr.selected-row .serie-cell { color:var(--green); }
+.td-mono { font-family:'JetBrains Mono',monospace; font-size:11px; }
+.td-mine { font-size:10px; color:var(--muted); }
+.td-ov-none { font-size:10px; color:var(--muted); font-style:italic; }
+.status-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:4px; }
+.check-col { width:44px; }
+input[type=checkbox] { 
+  accent-color:var(--accent); 
+  width:18px; height:18px; 
+  cursor:pointer;
+  border-radius:6px;
+}
+/* Larger tap area — the td itself is the tap target */
+td.check-col { 
+  padding:0; 
+  min-width:44px;
+  min-height:44px;
+}
+td.check-col input[type=checkbox] { 
+  display:block; 
+  margin:auto;
+  width:18px; 
+  height:18px;
+  pointer-events:none; /* td handles the tap */
+}
+th.check-col { min-width:44px; }
+
+.legend { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+.legend-item { display:flex; align-items:center; gap:4px; font-size:10px; color:var(--muted); }
+.legend-dot { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
+
+.empty-msg { text-align:center; padding:40px 20px; color:var(--muted); font-size:13px; }
+
+.copy-toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--green); color:#000; font-weight:700; font-size:13px; padding:10px 20px; border-radius:30px; opacity:0; transition:all 0.25s; pointer-events:none; z-index:999; white-space:nowrap; }
+.copy-toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">📊</div>
+  <div>
+    <div class="header-title">Forecast Dashboard</div>
+    <div class="header-sub" id="fileNameLabel">Sin datos</div>
+  </div>
+  <div class="header-right">
+    <div class="live-dot" id="liveDot" style="display:none"></div>
+    <div class="total-pill">N: <span id="totalCount">—</span></div>
+    <button class="reload-btn" onclick="document.getElementById('fileInput').click()">↺</button>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" onchange="loadFile(event)">
+    <input type="file" id="pdfInput" accept=".pdf" style="display:none" onchange="loadOVFromPDF(event)">
+  </div>
+</div>
+
+<!-- OV MODAL -->
+<div id="ovModal" onclick="closeOVModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:200;align-items:center;justify-content:center;padding:20px">
+  <div onclick="event.stopPropagation()" style="background:#0d1420;border:1px solid #1e2d47;border-radius:16px;padding:20px;width:100%;max-width:420px;max-height:80vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-size:14px;font-weight:700;color:#fbbf24">📄 Orden de Venta detectada</div>
+      <button onclick="closeOVModal()" style="background:transparent;border:none;color:#4a6080;font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div id="ovModalContent"></div>
+    <div class="ov-modal-footer" style="display:flex;gap:8px;margin-top:16px">
+      <button onclick="applyOVUpdate()" style="flex:1;background:linear-gradient(135deg,#f59e0b,#fbbf24);color:#000;font-weight:700;font-size:13px;padding:10px;border-radius:8px;border:none;cursor:pointer;font-family:inherit">✓ Aplicar actualización</button>
+      <button onclick="closeOVModal()" style="background:#1f2937;border:1px solid #2d3748;color:#718096;font-size:13px;padding:10px 14px;border-radius:8px;cursor:pointer;font-family:inherit">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOAD -->
+<div id="loadScreen" class="load-screen">
+  <div class="load-icon">📂</div>
+  <div class="load-title">Cargar Forecast</div>
+  <div class="load-sub">Selecciona <strong>Forecast_v1.xlsx</strong><br>Hoja: <strong>Consolidado</strong></div>
+  <button class="btn-load" onclick="document.getElementById('fileInput').click()">📥 Seleccionar archivo</button>
+  <div class="file-hint">Procesado en el dispositivo · Sin conexión requerida</div>
+</div>
+
+<!-- MAIN -->
+<div id="mainContent" style="display:none" class="main">
+
+  <!-- FILTERS -->
+  <div class="filters-section">
+    <div class="filters-title">⚙ Filtros</div>
+    <div class="filter-grid">
+      <div class="filter-group">
+        <div class="filter-label">Estimación (Mes)</div>
+        <div class="select-wrap"><select id="fMes" onchange="cascadeFilters('fMes')"><option value="">Todos</option></select></div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Fecha Real</div>
+        <div class="select-wrap"><select id="fFechaReal" onchange="cascadeFilters('fFechaReal')"><option value="">Todas</option></select></div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Status</div>
+        <div class="select-wrap"><select id="fStatus" onchange="cascadeFilters('fStatus')"><option value="">Todos</option></select></div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Size</div>
+        <div class="select-wrap"><select id="fSize" onchange="cascadeFilters('fSize')"><option value="">Todos</option></select></div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Minera</div>
+        <div class="select-wrap"><select id="fMine" onchange="cascadeFilters('fMine')"><option value="">Todas</option></select></div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Puerto</div>
+        <div class="select-wrap"><select id="fPort" onchange="cascadeFilters('fPort')"><option value="">Todos</option></select></div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Bodega</div>
+        <div class="select-wrap"><select id="fBodega" onchange="cascadeFilters('fBodega')"><option value="">Todas</option></select></div>
+      </div>
+      <div class="filter-group">
+        <div class="filter-label">Orden Venta</div>
+        <div class="select-wrap"><select id="fOrden" onchange="cascadeFilters('fOrden')"><option value="">Todas</option></select></div>
+      </div>
+    </div>
+    <div class="filter-actions">
+      <button class="btn-apply" onclick="applyFilters()">Aplicar filtros</button>
+      <button class="btn-reset-f" onclick="resetFilters()">✕ Limpiar</button>
+    </div>
+  </div>
+
+  <!-- KPIs — clickables para filtrar por status -->
+  <div class="kpi-row" id="kpiRow"></div>
+    <div id="dispatchProgress" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:8px"></div>
+
+  <!-- BARS -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">Series por Minera</div>
+      <div class="section-count" id="barCount">—</div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-wrap" id="barWrap" style="position:relative"><canvas id="barChart"></canvas><div id="mineHint" style="display:none;position:absolute;top:6px;right:6px;font-size:10px;color:#fbbf24;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:6px;padding:2px 8px">Toca la barra de nuevo para quitar filtro</div></div>
+      <div class="legend" id="barLegend"></div>
+    </div>
+  </div>
+
+  <!-- TREEMAP -->
+  <div class="section" style="margin-top:16px">
+    <div class="section-header">
+      <div class="section-title">Size × Pattern</div>
+      <div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px">
+        <div id="treemapProgCount" style="display:none;background:rgba(244,114,182,0.18);border:1px solid #f472b6;color:#f472b6;font-weight:700;font-size:11px;padding:3px 10px;border-radius:20px;letter-spacing:0.3px">—</div>
+        <div id="treemapCount" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:9px;padding:2px 8px;border-radius:20px;opacity:0.7">—</div>
+      </div>
+    </div>
+    <div id="treemapDetail" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px"></div>
+    <div class="chart-card">
+      <div class="treemap-grid" id="treemapGrid"></div>
+    </div>
+  </div>
+
+  <!-- ORDERS -->
+  <div class="section" style="margin-top:16px">
+    <div class="section-header">
+      <div class="section-title">Órdenes Vinculadas</div>
+      <div class="section-count" id="orderCount">—</div>
+      <button id="btnOVGroup" onclick="document.getElementById('pdfInput').click()" style="display:none;margin-left:auto;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;font-size:11px;font-weight:600;padding:4px 11px;border-radius:8px;cursor:pointer;font-family:inherit;white-space:nowrap">📄 Asignar OV</button>
+    </div>
+    <div class="chart-card">
+      <div class="orders-panel" id="ordersPanel"></div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="section" style="margin-top:16px">
+    <div class="section-header">
+      <div class="section-title">Detalle de Series</div>
+      <div class="section-count" id="tableCount">—</div>
+    </div>
+    <div class="chart-card" style="padding:12px">
+
+      <!-- Search bar -->
+      <div style="position:relative;margin-bottom:10px">
+        <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none">🔍</span>
+        <input type="text" id="serieSearch" placeholder="Buscar serie..." autocomplete="off" autocorrect="off" spellcheck="false"
+          oninput="onSerieSearch()"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);
+                 padding:9px 36px 9px 32px;border-radius:8px;font-size:13px;font-family:'JetBrains Mono',monospace;
+                 outline:none;-webkit-appearance:none">
+        <button id="btnClearSearch" onclick="clearSerieSearch()" 
+          style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);
+                 background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 4px">✕</button>
+      </div>
+
+      <!-- Sort buttons -->
+      <div class="table-toolbar">
+        <div class="sort-btns" id="sortBtns"></div>
+      </div>
+
+      <!-- Copy bar -->
+      <div class="copy-bar">
+        <span class="sel-info" id="selInfo"></span>
+        <button class="btn-clear-sel" id="btnClearSel" onclick="clearSel()">✕ Limpiar</button>
+        <button class="btn-copy-sel" id="btnCopySel" onclick="copySel()">✓ Copiar selección</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="check-col"><input type="checkbox" id="checkAll" onchange="toggleAll(this)"></th>
+              <th style="width:32px;text-align:center;color:var(--muted);font-size:10px">#</th>
+              <th>Minera</th>
+              <th>Serie</th>
+              <th>Size</th>
+              <th>Pattern</th>
+              <th>OV</th>
+              <th>F.Prog</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="copy-toast" id="copyToast"></div>
+
+<script>
+let DATA = [];
+let filtered = [];
+let tableRows = [];
+const OV_OVERRIDES = {};
+let activeOrdenFilter = null; // serie (uppercase) -> ovNum, persists across filter changes
+let currentFilename = '';
+let selectedSeries = new Set();
+let activeStatusFilter = null;
+let activeSortStatus = null;
+
+const STATUS_COLORS = {
+  'En Bodega':'#f59e0b','En Nave':'#8b5cf6','En TGN':'#ef4444',
+  'En SAI':'#06b6d4','Despachado':'#10b981','Eliminados':'#6b7280','.':'#374151'
+};
+const STATUS_ORDER = ['En Bodega','En Nave','En TGN','En SAI','Despachado','Eliminados','.'];
+const TREEMAP_PALETTE = ['#1d4ed8','#2563eb','#3b82f6','#7c3aed','#8b5cf6','#a78bfa','#065f46','#047857','#10b981','#92400e','#b45309','#f59e0b','#991b1b','#dc2626','#ef4444','#0e7490','#0891b2','#06b6d4'];
+
+let barChartInst = null;
+
+function formatDate(val) {
+  if (!val) return '';
+  let d = (val instanceof Date) ? val : new Date(String(val).trim());
+  if (isNaN(d)) return String(val).trim();
+  return `${String(d.getUTCDate()).padStart(2,'0')}/${String(d.getUTCMonth()+1).padStart(2,'0')}/${d.getUTCFullYear()}`;
+}
+function parseDMY(s) {
+  if (!s) return 0;
+  const p = s.split('/'); return new Date(p[2],p[1]-1,p[0]).getTime();
+}
+
+// ── LOAD ────────────────────────────────────────────────
+function loadFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('fileNameLabel').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+      const sheetName = wb.SheetNames.find(n => n.trim()==='Consolidado') || wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+      DATA = [];
+      for (let i=1; i<rows.length; i++) {
+        const row = rows[i];
+        const serie = row[2] ? String(row[2]).trim() : '';
+        if (!serie) continue;
+        DATA.push({
+          serie:      serie,
+          size:       row[5]  ? String(row[5]).trim()  : '',
+          pr:         row[6]  ? String(row[6]).trim()  : '',
+          pattern:    row[7]  ? String(row[7]).trim()  : '',
+          spec:       row[8]  ? String(row[8]).trim()  : '',
+          port:       row[11] ? String(row[11]).trim() : '',
+          bodega:     row[12] ? String(row[12]).trim() : '',
+          mine:       row[14] ? String(row[14]).trim() : '',
+          orden:      (row[15] && String(row[15]).trim().toLowerCase() !== 'sin orden') ? String(row[15]).trim() : '',
+          fecha_prog: row[16] ? formatDate(row[16])    : '',
+          status:     row[17] ? String(row[17]).trim() : '',
+          fecha_real: row[18] ? formatDate(row[18])    : '',
+          mes:        row[0]  ? String(row[0]).trim()  : '',
+        });
+      }
+      document.getElementById('totalCount').textContent = DATA.length;
+      document.getElementById('liveDot').style.display = 'block';
+      initDashboard();
+    } catch(err) { alert('Error: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── INIT ────────────────────────────────────────────────
+function initDashboard() {
+  // Restore saved OV overrides for this file
+  try {
+    const key = 'OV_OVERRIDES_' + (currentFilename || 'default');
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      Object.assign(OV_OVERRIDES, parsed);
+      const count = Object.keys(parsed).length;
+      if (count > 0) showToast(`↺ ${count} OV cargadas desde memoria`);
+    }
+  } catch(e) {}
+  document.getElementById('loadScreen').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'block';
+  const monthOrder = ['Ene','Feb','Mar','Marzo','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic','Bod','Nave','TGN'];
+  populateSel('fMes',      [...new Set(DATA.map(d=>d.mes))].filter(Boolean).sort((a,b)=>{const ia=monthOrder.indexOf(a),ib=monthOrder.indexOf(b);return(ia<0?99:ia)-(ib<0?99:ib);}));
+
+  // Auto-select current month
+  const monthNames = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const monthNamesFull = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const idx = new Date().getMonth();
+  const fMes = document.getElementById('fMes');
+  const candidates = [monthNames[idx], monthNamesFull[idx], monthNames[idx].toLowerCase(), monthNamesFull[idx].toLowerCase()];
+  const match = [...fMes.options].find(o => candidates.some(c => o.value.toLowerCase() === c.toLowerCase()));
+  if (match) fMes.value = match.value;
+  populateSel('fFechaReal',[...new Set(DATA.map(d=>d.fecha_real))].filter(Boolean).sort((a,b)=>parseDMY(a)-parseDMY(b)));
+  populateSel('fStatus',   [...new Set(DATA.map(d=>d.status))].filter(Boolean).sort());
+  populateSel('fSize',     [...new Set(DATA.map(d=>d.size))].filter(Boolean).sort((a,b)=>(parseFloat(a)||0)-(parseFloat(b)||0)));
+  populateSel('fMine',     [...new Set(DATA.map(d=>d.mine))].filter(Boolean).sort());
+  populateSel('fPort',     [...new Set(DATA.map(d=>d.port))].filter(Boolean).sort());
+  populateSel('fBodega',   [...new Set(DATA.map(d=>d.bodega))].filter(Boolean).sort());
+  populateSel('fOrden',    [...new Set(DATA.map(d=>d.orden))].filter(Boolean).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})));
+  applyFilters();
+}
+
+function populateSel(id, values) {
+  const sel = document.getElementById(id);
+  const prev = sel.value;
+  const first = sel.options[0].outerHTML;
+  sel.innerHTML = first;
+  values.forEach(v => { const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+  if (prev && values.includes(prev)) sel.value = prev;
+}
+
+// ── CASCADE ──────────────────────────────────────────────
+const FILTER_IDS  = ['fMes','fFechaReal','fStatus','fSize','fMine','fPort','fBodega','fOrden'];
+const FILTER_FIELDS = { fMes:'mes', fFechaReal:'fecha_real', fStatus:'status', fSize:'size', fMine:'mine', fPort:'port', fBodega:'bodega', fOrden:'orden' };
+const FILTER_FIRST = ['Todos','Todas','Todas','Todos','Todas','Todos','Todas','Todas'];
+
+function getSubset(excludeId) {
+  // Returns data filtered by all selectors EXCEPT excludeId
+  return DATA.filter(d => {
+    for (const id of FILTER_IDS) {
+      if (id === excludeId) continue;
+      const val = document.getElementById(id).value;
+      if (val && d[FILTER_FIELDS[id]] !== val) return false;
+    }
+    return true;
+  });
+}
+
+function cascadeFilters(changedId) {
+  const monthOrder = ['Ene','Feb','Mar','Marzo','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic','Bod','Nave','TGN'];
+  // Refresh every OTHER selector based on the current subset excluding itself
+  FILTER_IDS.forEach((id, i) => {
+    if (id === changedId) return; // don't touch the one user just changed
+    const sel = document.getElementById(id);
+    const prev = sel.value;
+    const first = sel.options[0].outerHTML;
+    const subset = getSubset(id);
+    let values = [...new Set(subset.map(d => d[FILTER_FIELDS[id]]))].filter(Boolean);
+
+    // Sort
+    if (id === 'fMes') values.sort((a,b)=>{const ia=monthOrder.indexOf(a),ib=monthOrder.indexOf(b);return(ia<0?99:ia)-(ib<0?99:ib);});
+    else if (id === 'fFechaReal') {
+      // Show fecha_real values for the current subset, sorted chronologically
+      // Separate real dates from "Sin Fecha" entries
+      const sinFecha = values.filter(v => v.toLowerCase().includes('sin'));
+      const realDates = values.filter(v => !v.toLowerCase().includes('sin'));
+      realDates.sort((a,b)=>parseDMY(a)-parseDMY(b));
+      values = [...realDates, ...sinFecha];
+    }
+    else if (id === 'fSize') values.sort((a,b)=>(parseFloat(a)||0)-(parseFloat(b)||0));
+    else if (id === 'fOrden') values.sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+    else values.sort();
+
+    sel.innerHTML = first;
+    values.forEach(v => { const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+    // Restore previous selection if still valid
+    if (prev && values.includes(prev)) sel.value = prev;
+  });
+
+  applyFilters();
+  // Show hint if mine is selected
+  const mineHint = document.getElementById('mineHint');
+  if (mineHint) mineHint.style.display = document.getElementById('fMine').value ? 'block' : 'none';
+}
+
+// ── FILTERS ─────────────────────────────────────────────
+function applyFilters() {
+  applyOVOverrides(); // ensure OV updates are in DATA before filtering
+  activeStatusFilter = null;
+  activeSortStatus = null;
+  selectedSeries.clear();
+
+  const mes       = document.getElementById('fMes').value;
+  const fechaReal = document.getElementById('fFechaReal').value;
+  const status    = document.getElementById('fStatus').value;
+  const size      = document.getElementById('fSize').value;
+  const mine      = document.getElementById('fMine').value;
+  const port      = document.getElementById('fPort').value;
+  const bodega    = document.getElementById('fBodega').value;
+  const _ordenRaw  = activeOrdenFilter || document.getElementById('fOrden').value;
+  const orden      = _ordenRaw; // '__sin__' or actual OV number or ''
+
+  // baseMatch kept for cascade compatibility (not used in main filter below)
+  const baseMatch = d => {
+    if (mes    && d.mes?.toLowerCase() !== mes?.toLowerCase()) return false;
+    if (status && d.status !== status) return false;
+    if (size   && d.size   !== size)   return false;
+    if (mine   && d.mine   !== mine)   return false;
+    if (port   && d.port   !== port)   return false;
+    if (bodega && d.bodega !== bodega) return false;
+    if (orden === '__sin__' && d.orden) return false; // Sin Orden: only series with no OV
+    else if (orden && orden !== '__sin__' && d.orden !== orden) return false;
+    return true;
+  };
+
+  // ── FILTER LOGIC ─────────────────────────────────────
+  // Base: mes + secondary filters (size, pattern, port, bodega, orden)
+  // fechaReal and mine are applied on top
+  const secMatch = d => {
+    if (status && d.status !== status) return false;
+    if (size   && d.size   !== size)   return false;
+    if (mine   && d.mine   !== mine)   return false;
+    if (port   && d.port   !== port)   return false;
+    if (bodega && d.bodega !== bodega) return false;
+    if (orden === '__sin__' && d.orden) return false; // Sin Orden: only series with no OV
+    else if (orden && orden !== '__sin__' && d.orden !== orden) return false;
+    return true;
+  };
+
+  const mesMatch = d => {
+    if (mes && d.mes?.toLowerCase() !== mes?.toLowerCase()) return false;
+    return true;
+  };
+
+  const AVAILABLE = ['En Bodega', 'En Nave', 'En TGN'];
+
+  // If orden filter active → show ONLY series of that orden (simple, no secondary)
+  if (orden) {
+    filtered = DATA.filter(d => mesMatch(d) && secMatch(d));
+
+  } else if (fechaReal && mine) {
+    // Mes + Fecha Real + Minera
+    const primary = DATA.filter(d => mesMatch(d) && secMatch(d)
+      && d.fecha_real === fechaReal && d.mine === mine);
+    const available = DATA.filter(d => mesMatch(d) && secMatch(d)
+      && AVAILABLE.includes(d.status)
+      && d.mine === mine
+      && d.fecha_real !== fechaReal);
+    const seen = new Set(primary.map(d => d.serie));
+    filtered = [...primary, ...available.filter(d => !seen.has(d.serie))];
+
+  } else if (fechaReal) {
+    // Mes + Fecha Real
+    const primary = DATA.filter(d => mesMatch(d) && secMatch(d)
+      && d.fecha_real === fechaReal);
+    const minesWithDespacho = new Set(primary.map(d => d.mine));
+    const available = DATA.filter(d => mesMatch(d) && secMatch(d)
+      && AVAILABLE.includes(d.status)
+      && minesWithDespacho.has(d.mine)
+      && d.fecha_real !== fechaReal);
+    const seen = new Set(primary.map(d => d.serie));
+    filtered = [...primary, ...available.filter(d => !seen.has(d.serie))];
+
+  } else if (mine) {
+    filtered = DATA.filter(d => mesMatch(d) && secMatch(d) && d.mine === mine);
+
+  } else {
+    filtered = DATA.filter(d => mesMatch(d) && secMatch(d));
+  }
+
+  renderAll();
+  // Show PDF button only when data is loaded
+  const ovGroup = document.getElementById('btnOVGroup');
+  if (ovGroup) ovGroup.style.display = DATA.length ? 'flex' : 'none';
+}
+
+function resetFilters() {
+  ['fMes','fFechaReal','fStatus','fSize','fMine','fPort','fBodega','fOrden']
+    .forEach(id => document.getElementById(id).value = '');
+  activeOrdenFilter = null;
+  const srch = document.getElementById('serieSearch');
+  if (srch) { srch.value = ''; }
+  const btnCS = document.getElementById('btnClearSearch');
+  if (btnCS) btnCS.style.display = 'none';
+  applyFilters();
+}
+
+function applyOVOverrides() {
+  // Re-apply any OV overrides that may have been lost (e.g. after filter rebuild)
+  Object.entries(OV_OVERRIDES).forEach(([serie, ovNum]) => {
+    const d = DATA.find(r => (r.serie||'').trim().toUpperCase() === serie);
+    if (d) d.orden = ovNum;
+  });
+}
+
+function renderAll() {
+  applyOVOverrides();
+  renderKPIs();
+  renderBarChart();
+  renderTreemap();
+  renderOrders();
+  buildTableRows();
+  renderSortBtns();
+  renderTable();
+}
+
+// ── KPIs (clickables) ────────────────────────────────────
+function renderKPIs() {
+  const total = filtered.length;
+  const byStatus = {};
+  filtered.forEach(d => { byStatus[d.status] = (byStatus[d.status]||0)+1; });
+
+  const kpis = [
+    { label:'Total', val:total, color:'#3b82f6', key:null },
+    { label:'En Bodega', val:byStatus['En Bodega']||0, color:'#f59e0b', key:'En Bodega' },
+    { label:'En Nave',   val:byStatus['En Nave']  ||0, color:'#8b5cf6', key:'En Nave'   },
+    { label:'En TGN',    val:byStatus['En TGN']   ||0, color:'#ef4444', key:'En TGN'    },
+    { label:'En SAI',    val:byStatus['En SAI']   ||0, color:'#06b6d4', key:'En SAI'    },
+    { label:'Despachado',val:byStatus['Despachado']||0,color:'#10b981', key:'Despachado'},
+  ];
+
+  // Calculate dispatch progress against FULL month (not just filtered)
+  const mes = document.getElementById('fMes').value;
+  const monthTotal = mes ? DATA.filter(d => d.mes?.toLowerCase() === mes.toLowerCase()).length : total;
+  const monthDispatched = mes ? DATA.filter(d => d.mes?.toLowerCase() === mes.toLowerCase() && d.status === 'Despachado').length : (byStatus['Despachado']||0);
+  const pct = monthTotal > 0 ? Math.round((monthDispatched / monthTotal) * 100) : 0;
+
+  document.getElementById('kpiRow').innerHTML = kpis.map(k => `
+    <div class="kpi-card${activeStatusFilter===k.key?' active':''}" style="--kpi-color:${k.color}" onclick="filterByStatus('${k.key||''}')">
+      <div class="kpi-val">${k.val}</div>
+      <div class="kpi-label">${k.label}</div>
+    </div>`).join('');
+
+  // Render progress bar below KPIs
+  const progressEl = document.getElementById('dispatchProgress');
+  if (progressEl) {
+    const color = pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#3b82f6';
+    progressEl.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px">Despacho ${mes||'Total'}</span>
+          <span style="font-size:11px;color:#4a6080">${monthDispatched} de ${monthTotal} neumáticos</span>
+        </div>
+        <span style="font-size:22px;font-weight:700;color:${color};font-family:'JetBrains Mono',monospace">${pct}%</span>
+      </div>
+      <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${color}88,${color});border-radius:99px;transition:width 0.5s ease"></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap">
+        ${kpis.filter(k=>k.key&&k.val>0).map(k=>`
+          <span style="font-size:10px;color:${k.color}">
+            <span style="font-weight:700">${k.val}</span>
+            <span style="color:#4a6080"> ${k.label}</span>
+          </span>`).join('')}
+      </div>`;
+  }
+}
+
+function filterByStatus(key) {
+  // Toggle KPI filter — affects table sort/highlight only
+  activeSortStatus = key || null;
+  activeStatusFilter = key || null;
+  buildTableRows();
+  renderSortBtns();
+  renderTable();
+  // Scroll to table
+  document.querySelector('.section:last-child').scrollIntoView({behavior:'smooth'});
+}
+
+// ── BAR CHART ────────────────────────────────────────────
+function renderBarChart() {
+  const mines = [...new Set(filtered.map(d=>d.mine))].filter(Boolean).sort();
+  const activeStatuses = STATUS_ORDER.filter(s => filtered.some(d=>d.status===s));
+  const fechaReal = document.getElementById('fFechaReal').value;
+  document.getElementById('barCount').textContent = `${mines.length} mineras`;
+
+  // Count programados per mine (series matching selected fecha_real)
+  const progByMine = {};
+  if (fechaReal) {
+    mines.forEach(m => {
+      progByMine[m] = filtered.filter(d => d.mine === m && d.fecha_real === fechaReal).length;
+    });
+  }
+
+  const datasets = activeStatuses.map(s => ({
+    label:s, data:mines.map(m=>filtered.filter(d=>d.mine===m&&d.status===s).length),
+    backgroundColor:STATUS_COLORS[s]||'#374151', borderRadius:3, borderSkipped:false,
+  }));
+
+  const wrap = document.getElementById('barWrap');
+  wrap.style.height = Math.max(180, mines.length*34)+'px';
+  if (barChartInst) barChartInst.destroy();
+
+  // Custom plugin: draw "Prog: N" label at end of each bar
+  const progLabelPlugin = {
+    id: 'progLabel',
+    afterDraw(chart) {
+      if (!fechaReal) return;
+      const ctx = chart.ctx;
+      const meta = chart.getDatasetMeta(chart.data.datasets.length - 1);
+      chart.data.labels.forEach((mine, i) => {
+        const prog = progByMine[mine] || 0;
+        if (!prog) return;
+        // Find total bar width for this mine
+        const bar = meta.data[i];
+        if (!bar) return;
+        const totalVal = activeStatuses.reduce((sum, s) =>
+          sum + filtered.filter(d => d.mine === mine && d.status === s).length, 0);
+        const xScale = chart.scales.x;
+        const xEnd = xScale.getPixelForValue(totalVal);
+        const y = bar.y;
+        ctx.save();
+        ctx.font = 'bold 11px JetBrains Mono, monospace';
+        ctx.fillStyle = '#f472b6';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`✦ ${prog} prog.`, xEnd + 6, y);
+        ctx.restore();
+      });
+    }
+  };
+
+  barChartInst = new Chart(document.getElementById('barChart'), {
+    type:'bar', data:{labels:mines, datasets},
+    plugins:[progLabelPlugin],
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ right: fechaReal ? 90 : 10 } },
+      onClick(evt, elements) {
+        if (!elements.length) return;
+        const mine = mines[elements[0].index];
+        // Set minera filter
+        const fMine = document.getElementById('fMine');
+        if (fMine.value === mine) {
+          // Second tap = deselect
+          fMine.value = '';
+        } else {
+          fMine.value = mine;
+        }
+        cascadeFilters('fMine');
+        // Scroll to table smoothly
+        setTimeout(() => {
+          document.getElementById('tableBody').closest('.section')?.scrollIntoView({behavior:'smooth', block:'start'});
+        }, 150);
+      },
+      plugins:{
+        legend:{display:false},
+        tooltip:{backgroundColor:'#0d1420',borderColor:'#1e2d47',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#4a6080',
+          callbacks:{
+            title: ctx => ctx[0]?.label || '',
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.x}`
+          }
+        }
+      },
+      scales:{
+        x:{stacked:true,grid:{color:'#1e2d47'},ticks:{color:'#4a6080',font:{family:'JetBrains Mono',size:10}}},
+        y:{stacked:true,grid:{display:false},ticks:{
+          color: ctx => {
+            const mine = document.getElementById('fMine').value;
+            return mine && mines[ctx.index] === mine ? '#fbbf24' : '#94a3b8';
+          },
+          font:{family:'Space Grotesk',size:10},maxRotation:0
+        }}
+      },
+      datasets: { bar: { minBarLength: 8 } }
+    }
+  });
+  // Make chart cursor pointer on hover
+  document.getElementById('barChart').style.cursor = 'pointer';
+
+  // Legend
+  let legend = activeStatuses.map(s=>`
+    <div class="legend-item"><div class="legend-dot" style="background:${STATUS_COLORS[s]}"></div>${s}</div>`).join('');
+  if (fechaReal) legend += `<div class="legend-item"><div class="legend-dot" style="background:#f472b6"></div>Programados (${fechaReal})</div>`;
+  document.getElementById('barLegend').innerHTML = legend;
+}
+
+// ── TREEMAP ──────────────────────────────────────────────
+function renderTreemap() {
+  const groups = {};
+  filtered.forEach(d => {
+    const key = `${d.size}||${d.pattern}`;
+    groups[key] = (groups[key]||0)+1;
+  });
+  const sorted = Object.entries(groups).sort((a,b)=>b[1]-a[1]);
+  const total = filtered.length||1;
+  document.getElementById('treemapCount').textContent = `${sorted.length} combinaciones`;
+
+  // Inline detail: only series programadas for selected fecha_real
+  const fechaRealVal = document.getElementById('fFechaReal').value;
+  const detailEl = document.getElementById('treemapDetail');
+  const progCountEl = document.getElementById('treemapProgCount');
+  if (detailEl) {
+    if (fechaRealVal) {
+      // Group programadas by size+pattern
+      const progGroups = {};
+      filtered.filter(d => d.fecha_real === fechaRealVal).forEach(d => {
+        const key = `${d.size}||${d.pattern}`;
+        progGroups[key] = (progGroups[key]||0) + 1;
+      });
+      const progSorted = Object.entries(progGroups).sort((a,b) => b[1]-a[1]);
+      // Update programadas badge
+      if (progCountEl) {
+        progCountEl.style.display = 'block';
+        progCountEl.textContent = `${progSorted.length} medidas programadas`;
+      }
+      if (progSorted.length) {
+        detailEl.innerHTML = progSorted.map(([key, count]) => {
+          const [size, pattern] = key.split('||');
+          return `<span style="background:rgba(244,114,182,0.1);border:1px solid rgba(244,114,182,0.4);border-radius:6px;padding:2px 8px;font-size:10px;font-family:'JetBrains Mono',monospace;white-space:nowrap"><span style="color:var(--accent)">${size}</span> <span style="color:var(--muted)">${pattern}</span> <span style="color:#f472b6;font-weight:700">${count}</span></span>`;
+        }).join('');
+      } else {
+        detailEl.innerHTML = `<span style="font-size:10px;color:var(--muted)">Sin programados para ${fechaRealVal}</span>`;
+      }
+    } else {
+      detailEl.innerHTML = '';
+      if (progCountEl) progCountEl.style.display = 'none';
+    }
+  }
+  const grid = document.getElementById('treemapGrid');
+  if (!sorted.length) { grid.innerHTML='<div class="empty-msg">Sin datos</div>'; return; }
+  grid.innerHTML = sorted.map(([key,count],i) => {
+    const [size,pattern] = key.split('||');
+    const pct = count/total;
+    const w = Math.max(pct*100,8);
+    const color = TREEMAP_PALETTE[i%TREEMAP_PALETTE.length];
+    return `<div class="treemap-cell" style="width:calc(${w}% - 3px);background:${color}cc;border:1px solid ${color}">
+      <div class="treemap-count">${count}</div>
+      <div><div class="treemap-size">${size||'—'}</div><div class="treemap-pat">${pattern||'—'}</div></div>
+    </div>`;
+  }).join('');
+}
+
+// ── ORDERS PANEL ─────────────────────────────────────────
+function renderOrders() {
+  // Group by orden, including "Sin Orden"
+  const groups = {};
+  filtered.forEach(d => {
+    const key = d.orden || '__sin__';
+    groups[key] = (groups[key]||0)+1;
+  });
+
+  const sorted = Object.entries(groups).sort((a,b) => {
+    if (a[0]==='__sin__') return 1;
+    if (b[0]==='__sin__') return -1;
+    return a[0].localeCompare(b[0],undefined,{numeric:true});
+  });
+
+  document.getElementById('orderCount').textContent = `${sorted.length} órdenes`;
+
+  document.getElementById('ordersPanel').innerHTML = sorted.map(([key,count]) => {
+    const isSin = key === '__sin__';
+    const isActive = isSin ? activeOrdenFilter === '__sin__' : (activeOrdenFilter === key || document.getElementById('fOrden').value === key);
+    return `<div class="order-chip${isSin?' sin-orden':''}${isActive?' active-chip':''}" onclick="filterByOrden('${isSin?'':key}')" style="${isActive?'border-color:var(--accent);background:rgba(139,92,246,0.15)':''}">
+      <span class="order-chip-num${isSin?' sin':''}">${isSin?'Sin Orden':key}</span>
+      <span class="order-chip-count">${count}</span>
+    </div>`;
+  }).join('');
+}
+
+function filterByOrden(orden) {
+  // orden is '' for Sin Orden — use '__sin__' as sentinel
+  const key = orden === '' ? '__sin__' : orden;
+  // Toggle: tap same chip again to deselect
+  if (activeOrdenFilter === key) {
+    activeOrdenFilter = null;
+    document.getElementById('fOrden').value = '';
+    applyFilters();
+  } else {
+    activeOrdenFilter = key;
+    document.getElementById('fOrden').value = orden;
+    applyFilters();
+    // Scroll down to table
+    setTimeout(() => {
+      const tableSection = document.getElementById('tableBody')?.closest('.section');
+      if (tableSection) tableSection.scrollIntoView({behavior:'smooth', block:'start'});
+    }, 200);
+  }
+}
+
+// ── SORT BUTTONS ─────────────────────────────────────────
+function renderSortBtns() {
+  const activeStatuses = STATUS_ORDER.filter(s => filtered.some(d=>d.status===s));
+  const container = document.getElementById('sortBtns');
+  const fechaReal = document.getElementById('fFechaReal').value;
+  const progCount = fechaReal ? filtered.filter(d => d.fecha_real === fechaReal).length : 0;
+
+  let html = `<div class="sort-btn${!activeSortStatus ? " active" : ""}" style="--kpi-color:#3b82f6" onclick="sortBy(null)"><div class="dot"></div> Todos</div>`;
+
+  if (fechaReal) {
+    const isActive = activeSortStatus === "__prog__";
+    html += `<div class="sort-btn${isActive ? " active" : ""}" style="--kpi-color:#f472b6" onclick="sortBy('__prog__')"><div class="dot"></div> Programados <span style="background:rgba(244,114,182,0.2);border-radius:10px;padding:1px 6px;margin-left:2px;font-size:10px">${progCount}</span></div>`;
+  }
+
+  activeStatuses.forEach(s => {
+    const isActive = activeSortStatus === s;
+    html += `<div class="sort-btn${isActive ? " active" : ""}" style="--kpi-color:${STATUS_COLORS[s]}" onclick="sortBy('${s}')"><div class="dot"></div> ${s}</div>`;
+  });
+
+  container.innerHTML = html;
+}
+
+function sortBy(status) {
+  activeSortStatus = status;
+  buildTableRows();
+  renderSortBtns();
+  renderTable();
+}
+
+// ── TABLE ────────────────────────────────────────────────
+// ── TABLE ────────────────────────────────────────────────
+function onSerieSearch() {
+  const val = document.getElementById('serieSearch').value;
+  document.getElementById('btnClearSearch').style.display = val ? 'block' : 'none';
+  buildTableRows();
+  renderTable();
+}
+
+function clearSerieSearch() {
+  document.getElementById('serieSearch').value = '';
+  document.getElementById('btnClearSearch').style.display = 'none';
+  buildTableRows();
+  renderTable();
+}
+
+function buildTableRows() {
+  const searchVal = (document.getElementById('serieSearch')?.value || '').trim().toUpperCase();
+  let rows = searchVal
+    ? filtered.filter(d => (d.serie||'').toUpperCase().includes(searchVal))
+    : [...filtered];
+  const fechaReal = document.getElementById("fFechaReal").value;
+
+  if (activeSortStatus === "__prog__") {
+    // Filter: only programados for that fecha_real
+    rows = rows.filter(d => fechaReal && d.fecha_real === fechaReal);
+    rows.sort((a,b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status));
+  } else if (activeSortStatus) {
+    // Filter: only selected status
+    rows = rows.filter(d => d.status === activeSortStatus);
+  } else {
+    // All: sort by status order
+    rows.sort((a,b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status));
+  }
+
+  tableRows = rows;
+}
+
+function renderTable() {
+  const rows = tableRows.slice(0, 300);
+  const total = tableRows.length;
+  document.getElementById('tableCount').textContent = total > 300 ? `${total} (mostrando 300)` : `${total}`;
+
+  const dot = s => `<span class="status-dot" style="background:${STATUS_COLORS[s]||'#374151'}"></span>`;
+
+  document.getElementById('tableBody').innerHTML = rows.length
+    ? rows.map((d, i) => `
+      <tr class="${selectedSeries.has(d.serie)?'selected-row':''}" onclick="toggleRow('${d.serie}', this)">
+        <td class="check-col" onclick="event.stopPropagation();toggleRow('${d.serie}',this.closest('tr'))"><input type="checkbox" ${selectedSeries.has(d.serie)?'checked':''} style="pointer-events:none"></td>
+        <td style="text-align:center;color:var(--muted);font-size:10px;font-family:'JetBrains Mono',monospace">${i+1}</td>
+        <td class="td-mine">${d.mine}</td>
+        <td class="td-mono serie-cell">${d.serie}</td>
+        <td class="td-mono">${d.size}</td>
+        <td class="td-mono">${d.pattern}</td>
+        <td class="${d.orden?'td-mono':'td-ov-none'}">${d.orden||'Sin Orden'}</td>
+        <td class="td-mono" style="color:var(--muted);font-size:10px">${d.fecha_prog||''}</td>
+        <td>${dot(d.status)}${d.status}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="8" class="empty-msg">Sin resultados</td></tr>';
+
+  updateSelUI();
+}
+
+// ── SELECTION ────────────────────────────────────────────
+function toggleRow(serie, row) {
+  if (selectedSeries.has(serie)) {
+    selectedSeries.delete(serie);
+    row.classList.remove('selected-row');
+    row.querySelector('input[type=checkbox]').checked = false;
+  } else {
+    selectedSeries.add(serie);
+    row.classList.add('selected-row');
+    row.querySelector('input[type=checkbox]').checked = true;
+  }
+  updateSelUI();
+}
+
+function toggleAll(cb) {
+  const visible = tableRows.slice(0,300);
+  if (cb.checked) { visible.forEach(d => selectedSeries.add(d.serie)); }
+  else { visible.forEach(d => selectedSeries.delete(d.serie)); }
+  renderTable();
+}
+
+function clearSel() {
+  selectedSeries.clear();
+  document.getElementById('checkAll').checked = false;
+  renderTable();
+}
+
+function updateSelUI() {
+  const n = selectedSeries.size;
+  document.getElementById('selInfo').textContent = n > 0 ? `${n} seleccionadas` : '';
+  document.getElementById('btnClearSel').style.display = n > 0 ? 'block' : 'none';
+  document.getElementById('btnCopySel').style.display  = n > 0 ? 'block' : 'none';
+}
+
+function copySel() {
+  const list = tableRows.filter(d => selectedSeries.has(d.serie));
+  const sep = '━━━━━━━━━━━━━━━━━━━━━';
+  const bodyLines = list.map((d, i) => {
+    const ov = d.orden ? `OV: ${d.orden}` : 'Sin Orden';
+    return `${i+1}. ${d.serie} — ${d.size} ${d.pattern} | ${ov}`;
+  });
+  const text = [...bodyLines, sep, `Total: ${list.length} serie${list.length !== 1 ? 's' : ''}`].join('\n');
+  if (navigator.clipboard) { navigator.clipboard.writeText(text).then(()=>showToast(`✓ ${list.length} series copiadas`)); }
+  else {
+    const el = document.createElement('textarea'); el.value=text; document.body.appendChild(el); el.select();
+    document.execCommand('copy'); document.body.removeChild(el); showToast(`✓ ${list.length} series copiadas`);
+  }
+}
+
+// ── PDF OV LOADER ───────────────────────────────────────
+let pendingOVUpdate = null;
+
+async function pasteOVFromClipboard() {
+  // Show paste modal — user pastes text manually (works on all browsers/iOS)
+  showPasteModal();
+}
+
+function showPasteModal() {
+  const modal = document.getElementById('ovModal');
+  const content = document.getElementById('ovModalContent');
+
+  content.innerHTML = `
+    <div style="margin-bottom:12px">
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:10px;line-height:1.6">
+        Copia el texto del PDF desde Mail y pégalo aquí:<br>
+        <span style="color:#4a6080;font-size:11px">Mail → Compartir → Copiar → volver acá → mantener presionado → Pegar</span>
+      </div>
+      <textarea id="pasteArea"
+        placeholder="Pega aquí el texto del PDF..."
+        rows="10"
+        style="width:100%;background:#070b14;border:1px solid rgba(100,130,170,0.3);border-radius:8px;
+               padding:10px;font-size:12px;color:#e2e8f0;font-family:'JetBrains Mono',monospace;
+               outline:none;resize:none;box-sizing:border-box;line-height:1.6;
+               -webkit-user-select:text;user-select:text;touch-action:manipulation"></textarea>
+    </div>
+    <div id="pastePreview" style="font-size:11px;color:#4a6080;min-height:18px;margin-bottom:4px"></div>
+  `;
+
+  // Live preview as user pastes
+  const ta = content.querySelector('#pasteArea');
+  const preview = content.querySelector('#pastePreview');
+  ta.addEventListener('input', () => {
+    const { ovNum, series } = extractFromText(ta.value);
+    const matched = series.filter(s => DATA.some(d => (d.serie||'').trim().toUpperCase() === s.toUpperCase()));
+    let msg = '';
+    if (ovNum) msg += `<span style="color:#fbbf24">OV: ${ovNum}</span>`;
+    if (matched.length) msg += `${ovNum?' · ':''}<span style="color:#10b981">${matched.length} series encontradas</span>`;
+    if (!ovNum && !matched.length && ta.value.trim()) msg = '<span style="color:#ef4444">No se detectó OV ni series</span>';
+    preview.innerHTML = msg;
+  });
+
+  // Replace footer
+  const footer = modal.querySelector('.ov-modal-footer');
+  if (footer) {
+    footer.innerHTML = `
+      <button onclick="applyPastedText()" style="flex:1;background:#fbbf24;color:#000;border:none;border-radius:8px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✓ Detectar y aplicar</button>
+      <button onclick="closeOVModal()" style="background:rgba(255,255,255,0.06);color:#94a3b8;border:none;border-radius:8px;padding:12px 18px;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button>
+    `;
+  }
+
+  modal.style.display = 'flex';
+  setTimeout(() => ta.focus(), 100);
+}
+
+function applyPastedText() {
+  const ta = document.getElementById('pasteArea');
+  if (!ta || !ta.value.trim()) { showToast('Pega el texto primero'); return; }
+  const { ovNum, series } = extractFromText(ta.value);
+  if (!ovNum && !series.length) { showToast('No se detectó OV ni series'); return; }
+  parseOVText(ovNum, series, 'portapapeles');
+}
+
+function loadOVFromPDF(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  const reader = new FileReader();
+
+  reader.onload = async function(e) {
+    showToast('⏳ Leyendo PDF...');
+    const bytes = new Uint8Array(e.target.result);
+
+    // Try PDF.js (requires internet)
+    try {
+      const pdfjsLib = window['pdfjs-dist/build/pdf'];
+      if (pdfjsLib && pdfjsLib.getDocument) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        const pdf = await Promise.race([
+          pdfjsLib.getDocument({ data: bytes }).promise,
+          new Promise((_,rej) => setTimeout(() => rej(new Error('timeout')), 5000))
+        ]);
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          fullText += content.items.map(item => item.str).join(' ') + '\n';
+        }
+        const { ovNum, series } = extractFromText(fullText);
+        if (ovNum || series.length) {
+          return parseOVText(ovNum, series, file.name);
+        }
+      }
+    } catch(err) {
+      console.warn('PDF.js failed:', err.message);
+    }
+
+    // Fallback: open manual entry modal pre-filled with filename hint
+    showToast('Sin conexión — ingresa los datos manualmente');
+    showOVInputModal(file.name);
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function extractFromText(text) {
+  // Matches: "Orden de Venta Nº 19014", "Orden de Traslado Nº 3949", etc.
+  const ovMatch = text.match(/Orden\s+de\s+\w+\s+[Nº°\s]*(\d{3,6})/i)
+               || text.match(/OV\s*[:#]?\s*(\d{3,6})/i)
+               || text.match(/[Nn][º°]\s*(\d{3,6})/);
+  const ovNum = ovMatch ? ovMatch[1].trim() : null;
+  const series = [...new Set([...text.matchAll(/\b([A-Z][0-9][A-Z0-9]{5,8})\b/g)].map(m => m[1]))];
+  return { ovNum, series };
+}
+
+function showOVInputModal(hint) {
+  const modal = document.getElementById('ovModal');
+  const content = document.getElementById('ovModalContent');
+
+  content.innerHTML = `
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;color:#4a6080;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px">Número de OV</label>
+      <input id="ovInputNum" type="number" placeholder="Ej: 19009"
+        style="width:100%;background:#0d1420;border:1px solid rgba(251,191,36,0.4);border-radius:8px;padding:10px 14px;
+               font-size:22px;font-weight:700;color:#fbbf24;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box">
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:11px;color:#4a6080;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px">
+        Códigos de series <span style="color:#4a6080;font-weight:400;text-transform:none">(una por línea o separadas por espacio/coma)</span>
+      </label>
+      <textarea id="ovInputSeries" placeholder="B5K7J0042&#10;B5K7J0043&#10;B5K7J0057..."
+        rows="7"
+        style="width:100%;background:#0d1420;border:1px solid rgba(100,130,170,0.25);border-radius:8px;padding:10px 14px;
+               font-size:12px;color:#e2e8f0;font-family:'JetBrains Mono',monospace;outline:none;
+               resize:vertical;box-sizing:border-box;line-height:1.7"></textarea>
+    </div>
+    <div id="ovInputPreview" style="font-size:11px;color:#4a6080;min-height:18px;margin-bottom:2px"></div>
+  `;
+
+  // Live preview: count matched series as user types
+  const ta = content.querySelector('#ovInputSeries');
+  const preview = content.querySelector('#ovInputPreview');
+  ta.addEventListener('input', () => {
+    const raw = ta.value;
+    const codes = [...new Set(raw.match(/[A-Z][0-9][A-Z0-9]{5,8}/g) || [])];
+    const matched = codes.filter(s => DATA.some(d => d.serie === s));
+    if (codes.length === 0) { preview.textContent = ''; return; }
+    preview.innerHTML = `<span style="color:#10b981">${matched.length} encontradas en forecast</span>` +
+      (codes.length - matched.length > 0 ? ` · <span style="color:#ef4444">${codes.length - matched.length} no encontradas</span>` : '');
+  });
+
+  // Replace footer buttons
+  const footer = modal.querySelector('.ov-modal-footer');
+  if (footer) {
+    footer.innerHTML = `
+      <button onclick="applyOVFromInput()" style="flex:1;background:#fbbf24;color:#000;border:none;border-radius:8px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">✓ Aplicar actualización</button>
+      <button onclick="closeOVModal()" style="background:rgba(255,255,255,0.06);color:#94a3b8;border:none;border-radius:8px;padding:12px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancelar</button>
+    `;
+  }
+
+  modal.style.display = 'flex';
+  setTimeout(() => content.querySelector('#ovInputNum')?.focus(), 100);
+}
+
+function applyOVFromInput() {
+  const ovNum = document.getElementById('ovInputNum')?.value?.trim() || null;
+  const raw = document.getElementById('ovInputSeries')?.value || '';
+  const series = [...new Set(raw.match(/[A-Z][0-9][A-Z0-9]{5,8}/g) || [])];
+  if (!ovNum && series.length === 0) {
+    showToast('Ingresa al menos un número de OV o series');
+    return;
+  }
+  parseOVText(ovNum, series, 'ingreso manual');
+}
+
+function parseOVText(ovNum, series, filename) {
+  // Normalize extracted series
+  const normSeries = series.map(s => s.trim().toUpperCase());
+
+  // Normalize DATA series for comparison
+  const matched = normSeries.filter(s => DATA.some(d => (d.serie||'').trim().toUpperCase() === s));
+  const notFound = normSeries.filter(s => !DATA.some(d => (d.serie||'').trim().toUpperCase() === s));
+
+  console.log('[OV Debug] PDF:', filename);
+  console.log('[OV Debug] OV:', ovNum);
+  console.log('[OV Debug] Series extraídas:', normSeries);
+  console.log('[OV Debug] Matched:', matched);
+  console.log('[OV Debug] Sample DATA series:', DATA.slice(0,3).map(d=>d.serie));
+
+  if (!ovNum && !matched.length) {
+    showToast(`PDF leído — 0 series coinciden. OV: ${ovNum||'no detectada'}`);
+    return;
+  }
+
+  pendingOVUpdate = { ovNum, matched, notFound };
+  showOVModal(ovNum, matched, notFound);
+}
+
+function showOVModal(ovNum, matched, notFound) {
+  const modal = document.getElementById('ovModal');
+  const content = document.getElementById('ovModalContent');
+
+  const currentOV = matched.map(s => {
+    const d = DATA.find(r => r.serie === s);
+    return `<span style="color:${d && d.orden ? '#fbbf24' : '#10b981'}">${d && d.orden ? '↺' : '+'}</span> ${s} <span style="font-size:10px;color:#4a6080">(actual: ${d && d.orden ? d.orden : 'Sin OV'})</span>`;
+  }).join('<br>');
+
+  content.innerHTML = `
+    <div style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:10px;margin-bottom:12px">
+      <div style="font-size:11px;color:#4a6080;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">OV detectada</div>
+      <div style="font-size:22px;font-weight:700;color:#fbbf24;font-family:'JetBrains Mono',monospace">${ovNum || '—'}</div>
+    </div>
+    <div style="font-size:11px;font-weight:600;color:#e2e8f0;margin-bottom:6px">
+      ${matched.length} series encontradas en forecast:
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;line-height:2;background:#070b14;border-radius:8px;padding:10px;margin-bottom:${notFound.length?'10px':'0'}">
+      ${currentOV || '<span style="color:#4a6080">Ninguna</span>'}
+    </div>
+    ${notFound.length ? `
+    <div style="font-size:11px;font-weight:600;color:#ef4444;margin-bottom:6px">${notFound.length} series no encontradas:</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#4a6080;line-height:1.8;background:#070b14;border-radius:8px;padding:8px">
+      ${notFound.join(' · ')}
+    </div>` : ''}
+  `;
+
+  modal.style.display = 'flex';
+}
+
+function closeOVModal() {
+  document.getElementById('ovModal').style.display = 'none';
+  pendingOVUpdate = null;
+}
+
+function applyOVUpdate() {
+  if (!pendingOVUpdate) return;
+  const { ovNum, matched } = pendingOVUpdate;
+  let updated = 0;
+  matched.forEach(s => {
+    const sNorm = s.trim().toUpperCase();
+    const d = DATA.find(r => (r.serie||'').trim().toUpperCase() === sNorm);
+    if (d) { d.orden = ovNum; updated++; }
+  });
+  closeOVModal();
+  // Persist OV in a durable override map so filters never lose it
+  matched.forEach(s => {
+    const sNorm = s.trim().toUpperCase();
+    OV_OVERRIDES[sNorm] = ovNum;
+  });
+  // Save to localStorage keyed by Excel filename
+  try {
+    const key = 'OV_OVERRIDES_' + (currentFilename || 'default');
+    localStorage.setItem(key, JSON.stringify(OV_OVERRIDES));
+  } catch(e) {}
+  // Repopulate orden dropdown so new OV appears (keep current filters intact)
+  const prevOrden = document.getElementById('fOrden').value;
+  populateSel('fOrden', [...new Set(DATA.map(d=>d.orden))].filter(Boolean).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})));
+  if (prevOrden) document.getElementById('fOrden').value = prevOrden;
+  applyFilters();
+  showToast(`✓ ${updated} series actualizadas con OV ${ovNum}`);
+}
+
+function showToast(msg) {
+  const t = document.getElementById('copyToast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2000);
+}
+</script>
+</body>
+</html>
