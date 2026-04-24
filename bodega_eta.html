@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BMSL — Planificación Bodega ETA</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700;900&family=Barlow:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  :root {
+    --red: #E8001D;
+    --red-dark: #b5001a;
+    --bg: #0d0e10;
+    --surface: #14161a;
+    --surface2: #1c1f26;
+    --surface3: #22262f;
+    --border: #2a2e38;
+    --border2: #363b48;
+    --text: #e8eaf0;
+    --text-dim: #7a8196;
+    --text-muted: #4a5068;
+    --accent: #f0a500;
+    --green: #2ecc71;
+    --blue: #3498db;
+    --purple: #9b59b6;
+    --teal: #1abc9c;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Barlow', sans-serif;
+    font-size: 12px;
+    min-height: 100vh;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    background: var(--surface);
+    border-bottom: 2px solid var(--red);
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 42px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-badge {
+    background: var(--red);
+    color: #fff;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 900;
+    font-size: 13px;
+    letter-spacing: 1px;
+    padding: 2px 9px;
+    clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 100%, 6px 100%);
+  }
+  .header-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  .header-subtitle {
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .header-meta {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+  }
+  .meta-pill {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .meta-pill strong {
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+
+  /* ── UPLOAD ZONE ── */
+  .upload-zone {
+    margin: 8px 14px 0;
+    border: 1px dashed var(--border2);
+    border-radius: 6px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: var(--surface);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--red);
+    background: rgba(232,0,29,0.05);
+  }
+  .upload-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .upload-text h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 1px;
+  }
+  .upload-text p {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .upload-btn {
+    margin-left: auto;
+    background: var(--red);
+    color: #fff;
+    border: none;
+    padding: 5px 14px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 100%, 6px 100%);
+    transition: background 0.2s;
+  }
+  .upload-btn:hover { background: var(--red-dark); }
+  #fileInput { display: none; }
+
+  /* ── STATS BAR ── */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+    margin: 7px 14px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--border2);
+    border-radius: 4px;
+    padding: 6px 10px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card.red { border-top-color: var(--red); }
+  .stat-card.amber { border-top-color: var(--accent); }
+  .stat-card.green { border-top-color: var(--green); }
+  .stat-card.blue { border-top-color: var(--blue); }
+  .stat-card.purple { border-top-color: var(--purple); }
+  .stat-label {
+    font-size: 8px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 2px;
+  }
+  .stat-value {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .stat-sub {
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* ── FILTERS ── */
+  .filters {
+    display: flex;
+    gap: 5px;
+    margin: 0 14px 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .filter-label {
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-right: 4px;
+  }
+  .filter-select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 3px 8px;
+    font-family: 'Barlow', sans-serif;
+    font-size: 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .filter-select:hover, .filter-select:focus { border-color: var(--red); }
+  .filter-chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 3px 10px;
+    font-size: 10px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .filter-chip.active {
+    background: var(--red);
+    border-color: var(--red);
+    color: #fff;
+  }
+  .filter-reset {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--text-dim);
+    padding: 3px 10px;
+    font-size: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-left: auto;
+    transition: all 0.2s;
+  }
+  .filter-reset:hover { border-color: var(--red); color: var(--red); }
+
+  /* ── VIEW TOGGLE ── */
+  .view-toggle {
+    display: flex;
+    gap: 0;
+    margin: 0 14px 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    width: fit-content;
+  }
+  .view-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 5px 14px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-right: 1px solid var(--border);
+  }
+  .view-btn:last-child { border-right: none; }
+  .view-btn.active {
+    background: var(--red);
+    color: #fff;
+  }
+
+  /* ── MAIN CONTENT ── */
+  .main { padding: 0 14px 24px; }
+
+  /* ── GROUP VIEW ── */
+  .size-block {
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .size-header {
+    background: var(--surface2);
+    border-bottom: 2px solid var(--red);
+    padding: 7px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+  }
+  .size-header:hover { background: var(--surface3); }
+  .size-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #fff;
+  }
+  .size-badge {
+    background: var(--red);
+    color: #fff;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+  .size-meta {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .size-kilos {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .chevron {
+    color: var(--text-dim);
+    transition: transform 0.2s;
+    margin-left: 6px;
+  }
+  .chevron.open { transform: rotate(180deg); }
+
+  .size-body { display: none; }
+  .size-body.open { display: block; }
+
+  /* pattern sub-block */
+  .pattern-block {
+    border-bottom: 1px solid var(--border);
+  }
+  .pattern-block:last-child { border-bottom: none; }
+  .pattern-header {
+    padding: 5px 10px 5px 20px;
+    background: rgba(255,255,255,0.02);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .pattern-header:hover { background: rgba(255,255,255,0.04); }
+  .pattern-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+    min-width: 60px;
+  }
+  .pattern-count {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .pattern-pills {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-left: auto;
+  }
+  .month-pill {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  .month-pill.abril  { background: rgba(52,152,219,0.2); color: #3498db; border: 1px solid rgba(52,152,219,0.3); }
+  .month-pill.mayo   { background: rgba(46,204,113,0.2); color: #2ecc71; border: 1px solid rgba(46,204,113,0.3); }
+  .month-pill.junio  { background: rgba(240,165,0,0.2);  color: var(--accent); border: 1px solid rgba(240,165,0,0.3); }
+  .month-pill.julio  { background: rgba(155,89,182,0.2); color: #9b59b6; border: 1px solid rgba(155,89,182,0.3); }
+
+  .pattern-body { display: none; overflow: hidden; }
+  .pattern-body.open { display: block; }
+
+  /* client rows */
+  .client-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .client-table th { display: none; }
+  .client-row {
+    display: grid;
+    grid-template-columns: 120px 36px 54px 1fr;
+    align-items: center;
+    border-bottom: 1px solid rgba(42,46,56,0.5);
+    min-height: 26px;
+  }
+  .client-row:last-child { border-bottom: none; }
+  .client-row:hover { background: rgba(255,255,255,0.02); }
+  .cr-cliente {
+    padding: 4px 6px 4px 14px;
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cr-cant {
+    padding: 4px 6px;
+    text-align: center;
+  }
+  .cr-mes {
+    padding: 4px 6px;
+    text-align: center;
+  }
+  .cr-series {
+    padding: 4px 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    align-items: center;
+  }
+  .client-name {
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--text);
+  }
+  .qty-bubble {
+    display: inline-block;
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    padding: 1px 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+    min-width: 36px;
+    text-align: center;
+  }
+  .month-dots {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .mdot {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-weight: 600;
+  }
+  .mdot.abril  { background: rgba(52,152,219,0.15); color: #3498db; }
+  .mdot.mayo   { background: rgba(46,204,113,0.15); color: #2ecc71; }
+  .mdot.junio  { background: rgba(240,165,0,0.15);  color: var(--accent); }
+  .mdot.julio  { background: rgba(155,89,182,0.15); color: #9b59b6; }
+  .series-list {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    align-items: center;
+  }
+  .series-list .serie-item {
+    padding: 1px 4px;
+    background: var(--surface3);
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .contenedor-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .expand-series {
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text);
+    background: var(--surface3);
+    border: 1px solid var(--border2);
+    border-radius: 2px;
+    cursor: pointer;
+    padding: 1px 5px;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .expand-series:hover { border-color: var(--red); color: var(--red); }
+
+  /* ── TABLE VIEW ── */
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  #mainTable {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    font-size: 12px;
+  }
+  #mainTable thead th {
+    background: var(--surface2);
+    padding: 6px 10px;
+    text-align: left;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-weight: 600;
+    border-bottom: 2px solid var(--red);
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    position: sticky;
+    top: 60px;
+  }
+  #mainTable thead th:hover { color: var(--text); }
+  #mainTable thead th .sort-icon { margin-left: 4px; opacity: 0.4; }
+  #mainTable thead th.sorted .sort-icon { opacity: 1; color: var(--red); }
+  #mainTable tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+  #mainTable tbody tr:hover { background: rgba(255,255,255,0.03); }
+  #mainTable td {
+    padding: 5px 10px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  #mainTable td.mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .tag-size { background: rgba(255,255,255,0.06); color: var(--text); }
+  .tag-pattern { background: rgba(240,165,0,0.15); color: var(--accent); }
+  .tag-abril  { background: rgba(52,152,219,0.15); color: #3498db; }
+  .tag-mayo   { background: rgba(46,204,113,0.15); color: #2ecc71; }
+  .tag-junio  { background: rgba(240,165,0,0.15); color: var(--accent); }
+  .tag-julio  { background: rgba(155,89,182,0.15); color: #9b59b6; }
+
+  /* ── EMPTY / LOADING ── */
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-dim);
+  }
+  .empty-state .icon { font-size: 36px; margin-bottom: 10px; opacity: 0.4; }
+  .empty-state h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .empty-state p { font-size: 13px; }
+
+  /* ── CONTAINER MAP ── */
+  .container-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px;
+  }
+  .container-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .container-card-header {
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    padding: 6px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .container-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .container-count {
+    background: var(--red);
+    color: #fff;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+  .container-items { padding: 6px 10px; }
+  .container-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(42,46,56,0.4);
+    font-size: 11px;
+  }
+  .container-item:last-child { border-bottom: none; }
+  .ci-left { color: var(--text-dim); }
+  .ci-right { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-muted); }
+  .ci-serie { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--teal); }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--red); }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <div class="logo-badge">BMSL</div>
+    <div>
+      <div class="header-title">Planificación de Bodega</div>
+      <div class="header-subtitle">Orden de llegada · Neumaticos OTR</div>
+    </div>
+  </div>
+  <div class="header-meta">
+    <div class="meta-pill">Total: <strong id="hTotal">—</strong></div>
+    <div class="meta-pill">ETA: <strong id="hEta">—</strong></div>
+    <div class="meta-pill">Nave: <strong id="hNave">—</strong></div>
+  </div>
+</div>
+
+<!-- UPLOAD -->
+<div class="upload-zone" id="uploadZone">
+  <div class="upload-icon">📦</div>
+  <div class="upload-text">
+    <h3>Cargar nuevo archivo ETA</h3>
+    <p>Arrastra un .xlsx aquí o haz clic para seleccionar · Columnas: Code, Size, Pattern, Cliente Final, Mes, Serie, Contenedor…</p>
+  </div>
+  <button class="upload-btn" onclick="document.getElementById('fileInput').click()">Seleccionar</button>
+  <input type="file" id="fileInput" accept=".xlsx,.xls">
+</div>
+
+<!-- STATS -->
+<div class="stats-bar" id="statsBar" style="display:none">
+  <div class="stat-card amber">
+    <div class="stat-label">Medidas distintas</div>
+    <div class="stat-value" id="sSizes">0</div>
+    <div class="stat-sub">tipos de aro</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-label">Patterns</div>
+    <div class="stat-value" id="sPatterns">0</div>
+    <div class="stat-sub">modelos de banda</div>
+  </div>
+  <div class="stat-card blue">
+    <div class="stat-label">Clientes</div>
+    <div class="stat-value" id="sClientes">0</div>
+    <div class="stat-sub">mineras</div>
+  </div>
+  <div class="stat-card purple">
+    <div class="stat-label">Contenedores</div>
+    <div class="stat-value" id="sContainers">0</div>
+    <div class="stat-sub">unidades a recibir</div>
+  </div>
+</div>
+
+<!-- CONTROLS -->
+<div id="controls" style="display:none">
+  <div class="filters" id="filters">
+    <span class="filter-label">Mes:</span>
+    <span class="filter-chip active" data-filter="mes" data-value="">Todos</span>
+    <span class="filter-chip" data-filter="mes" data-value="ABRIL">ABRIL</span>
+    <span class="filter-chip" data-filter="mes" data-value="MAYO">MAYO</span>
+    <span class="filter-chip" data-filter="mes" data-value="JUNIO">JUNIO</span>
+    <span class="filter-chip" data-filter="mes" data-value="JULIO">JULIO</span>
+
+    <span class="filter-label" style="margin-left:12px">Cliente:</span>
+    <select class="filter-select" id="filterCliente"><option value="">— Todas —</option></select>
+
+    <span class="filter-label" style="margin-left:8px">Medida:</span>
+    <select class="filter-select" id="filterSize"><option value="">— Todas —</option></select>
+
+    <button class="filter-reset" onclick="resetFilters()">↺ Limpiar</button>
+  </div>
+
+  <div class="view-toggle">
+    <button class="view-btn active" onclick="setView('group')">🗂 Por Medida / Pattern</button>
+    <button class="view-btn" onclick="setView('table')">☰ Tabla Detalle</button>
+    <button class="view-btn" onclick="setView('container')">🚢 Por Contenedor</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div id="emptyState" class="empty-state">
+    <div class="icon">🏭</div>
+    <h3>Sin datos cargados</h3>
+    <p>Carga un archivo Excel ETA para comenzar la planificación de bodega</p>
+  </div>
+  <div id="groupView" style="display:none"></div>
+  <div id="tableView" style="display:none">
+    <div class="table-wrap">
+      <table id="mainTable">
+        <thead>
+          <tr>
+            <th onclick="sortTable('size')">Medida <span class="sort-icon">↕</span></th>
+            <th onclick="sortTable('pattern')">Pattern <span class="sort-icon">↕</span></th>
+            <th onclick="sortTable('cliente')">Cliente <span class="sort-icon">↕</span></th>
+            <th onclick="sortTable('mes')" class="center">Mes <span class="sort-icon">↕</span></th>
+            <th>Serie</th>
+            <th>Contenedor</th>
+            <th onclick="sortTable('kilos')" class="center">Kg <span class="sort-icon">↕</span></th>
+            <th>Spec</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div id="containerView" style="display:none"></div>
+</div>
+
+<script>
+// ── DATA ──
+let allData = [{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0218","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4044431","kilos":4914.3,"bodega":"BMSL","cliente":"CASERONES","mes":"MAYO","anio":2026},{"code":"0RR00097","gpc":"600010276001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0406","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4044431","kilos":4873.9,"bodega":"BMSL","cliente":"SIERRA GORDA","mes":"MAYO","anio":2026},{"code":"0RR00097","gpc":"600010276001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0413","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4044431","kilos":4873.9,"bodega":"BMSL","cliente":"SIERRA GORDA","mes":"MAYO","anio":2026},{"code":"0RRL0200","gpc":"600010963001","size":"59/80R63","star":"2STAR","pattern":"V251Z","spec":"E1A","serie":"B6ELK0012","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4047282","kilos":5607.07,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RR00089","gpc":"600010268001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E1A","serie":"B6S7J0442","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4047282","kilos":5802.8,"bodega":"BMSL","cliente":"SPENCE","mes":"MAYO","anio":2026},{"code":"0RR00089","gpc":"600010268001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E1A","serie":"B6S7J0491","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4047282","kilos":5802.8,"bodega":"BMSL","cliente":"SPENCE","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0424","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4061510","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0425","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4061510","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0438","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4061510","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RRL0200","gpc":"600010963001","size":"59/80R63","star":"2STAR","pattern":"V251Z","spec":"E1A","serie":"B6ELK0013","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4062081","kilos":5607.07,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RRL0200","gpc":"600010963001","size":"59/80R63","star":"2STAR","pattern":"V251Z","spec":"E1A","serie":"B6ELK0015","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4062081","kilos":5607.07,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RRL0200","gpc":"600010963001","size":"59/80R63","star":"2STAR","pattern":"V251Z","spec":"E1A","serie":"B6ELK0016","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4062081","kilos":5607.07,"bodega":"BMSL","cliente":"SPENCE","mes":"JUNIO","anio":2026},{"code":"0RR00091","gpc":"600010270001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0397","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4062796","kilos":5793.33,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RR00091","gpc":"600010270001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0426","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4062796","kilos":5793.33,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RR00091","gpc":"600010270001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0427","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4062796","kilos":5793.33,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RR09875","gpc":"600009637001","size":"46/90R57","star":"2STAR","pattern":"MRWP","spec":"E3A","serie":"S6E004265","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4068829","kilos":3939.34,"bodega":"BMSL","cliente":"ZALDIVAR","mes":"MAYO","anio":2026},{"code":"0RR09875","gpc":"600009637001","size":"46/90R57","star":"2STAR","pattern":"MRWP","spec":"E3A","serie":"S6R000138","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4068829","kilos":3939.34,"bodega":"BMSL","cliente":"ZALDIVAR","mes":"MAYO","anio":2026},{"code":"0RR09875","gpc":"600009637001","size":"46/90R57","star":"2STAR","pattern":"MRWP","spec":"E3A","serie":"S6R000141","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4068829","kilos":3939.34,"bodega":"BMSL","cliente":"ZALDIVAR","mes":"MAYO","anio":2026},{"code":"0RR09875","gpc":"600009637001","size":"46/90R57","star":"2STAR","pattern":"MRWP","spec":"E3A","serie":"S6R000146","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4068829","kilos":3939.34,"bodega":"BMSL","cliente":"THIESS (ENCUENTRO)","mes":"MAYO","anio":2026},{"code":"0RR09875","gpc":"600009637001","size":"46/90R57","star":"2STAR","pattern":"MRWP","spec":"E3A","serie":"S6R000160","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4068829","kilos":3939.34,"bodega":"BMSL","cliente":"THIESS (ENCUENTRO)","mes":"MAYO","anio":2026},{"code":"0RR09875","gpc":"600009637001","size":"46/90R57","star":"2STAR","pattern":"MRWP","spec":"E3A","serie":"S6R000168","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4068829","kilos":3939.34,"bodega":"BMSL","cliente":"THIESS (ENCUENTRO)","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0378","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4075849","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0395","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4075849","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0409","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4075849","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0233","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4077029","kilos":4914.3,"bodega":"BMSL","cliente":"CASERONES","mes":"MAYO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0237","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4077029","kilos":4914.3,"bodega":"BMSL","cliente":"LOMAS BAYAS","mes":"JUNIO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0255","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4077029","kilos":4914.3,"bodega":"BMSL","cliente":"LOMAS BAYAS","mes":"JUNIO","anio":2026},{"code":"0RR00089","gpc":"600010268001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E1A","serie":"B6S7J0447","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4092044","kilos":5818.53,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00089","gpc":"600010268001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E1A","serie":"B6S7J0467","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4092044","kilos":5818.53,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00089","gpc":"600010268001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E1A","serie":"B6S7J0468","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4092044","kilos":5818.53,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0201","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4114190","kilos":4914.3,"bodega":"BMSL","cliente":"GABY","mes":"JUNIO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0202","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4114190","kilos":4914.3,"bodega":"BMSL","cliente":"CASERONES","mes":"MAYO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0217","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4114190","kilos":4914.3,"bodega":"BMSL","cliente":"LOMAS BAYAS","mes":"JUNIO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6E7G0020","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4120589","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6E7G0031","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4120589","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6S7G0250","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4120589","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0410","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4124199","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0423","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4124199","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0439","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4124199","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6E7G0008","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4133288","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6S7G0270","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4133288","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6S7G0279","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4133288","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0365","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4153601","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0379","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4153601","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0396","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4153601","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00089","gpc":"600010268001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E1A","serie":"B6S7J0423","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4155836","kilos":5802.8,"bodega":"BMSL","cliente":"HALES","mes":"JUNIO","anio":2026},{"code":"0RR00089","gpc":"600010268001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E1A","serie":"B6S7J0425","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4155836","kilos":5802.8,"bodega":"BMSL","cliente":"HALES","mes":"JUNIO","anio":2026},{"code":"0RR00089","gpc":"600010268001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E1A","serie":"B6S7J0446","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4155836","kilos":5818.53,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6E7G0022","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4166511","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6E7G0032","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4166511","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6E7G0054","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4166511","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0215","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4168113","kilos":4914.3,"bodega":"BMSL","cliente":"CASERONES","mes":"MAYO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0234","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4168113","kilos":4914.3,"bodega":"BMSL","cliente":"LOMAS BAYAS","mes":"JUNIO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0236","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4168113","kilos":4914.3,"bodega":"BMSL","cliente":"LOMAS BAYAS","mes":"JUNIO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0332","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4179226","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0348","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4179226","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00245","gpc":"600010990001","size":"59/80R63","star":"2STAR","pattern":"V144","spec":"E3A","serie":"B6E7J0364","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4179226","kilos":5382.02,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR09873","gpc":"600009635001","size":"46/90R57","star":"2STAR","pattern":"MRWP","spec":"E1A","serie":"S6E002973","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4190610","kilos":3944.67,"bodega":"BMSL","cliente":"CENTINELA OXIDOS","mes":"MAYO","anio":2026},{"code":"0RR09875","gpc":"600009637001","size":"46/90R57","star":"2STAR","pattern":"MRWP","spec":"E3A","serie":"S6E004273","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4190610","kilos":3939.34,"bodega":"BMSL","cliente":"ZALDIVAR","mes":"MAYO","anio":2026},{"code":"0RR09875","gpc":"600009637001","size":"46/90R57","star":"2STAR","pattern":"MRWP","spec":"E3A","serie":"S6R000145","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4190610","kilos":3939.34,"bodega":"BMSL","cliente":"THIESS (ENCUENTRO)","mes":"MAYO","anio":2026},{"code":"0RR09875","gpc":"600009637001","size":"46/90R57","star":"2STAR","pattern":"MRWP","spec":"E3A","serie":"S6R000169","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4190610","kilos":3939.34,"bodega":"BMSL","cliente":"THIESS (ENCUENTRO)","mes":"MAYO","anio":2026},{"code":"0RR09875","gpc":"600009637001","size":"46/90R57","star":"2STAR","pattern":"MRWP","spec":"E3A","serie":"S6R000170","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4190610","kilos":3939.34,"bodega":"BMSL","cliente":"THIESS (ENCUENTRO)","mes":"MAYO","anio":2026},{"code":"0RR09875","gpc":"600009637001","size":"46/90R57","star":"2STAR","pattern":"MRWP","spec":"E3A","serie":"S6R000171","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4190610","kilos":3939.34,"bodega":"BMSL","cliente":"ZALDIVAR","mes":"JUNIO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0186","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4192378","kilos":4906.77,"bodega":"BMSL","cliente":"CASERONES","mes":"MAYO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0188","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4192378","kilos":4906.77,"bodega":"BMSL","cliente":"GABY","mes":"JUNIO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0189","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4192378","kilos":4906.77,"bodega":"BMSL","cliente":"GABY","mes":"JUNIO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6E7G0042","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4198083","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6E7G0043","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4198083","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6E7G0071","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4198083","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00091","gpc":"600010270001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0366","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4203765","kilos":5793.33,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RR00091","gpc":"600010270001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0367","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4203765","kilos":5793.33,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RR00091","gpc":"600010270001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0380","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4203765","kilos":5793.33,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0235","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4220320","kilos":4914.3,"bodega":"BMSL","cliente":"LOMAS BAYAS","mes":"JUNIO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0256","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4220320","kilos":4914.3,"bodega":"BMSL","cliente":"LOMAS BAYAS","mes":"JUNIO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0257","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4220320","kilos":4914.3,"bodega":"BMSL","cliente":"LOMAS BAYAS","mes":"JUNIO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6S7G0264","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4224264","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6S7G0271","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4224264","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00081","gpc":"600010260001","size":"59/80R63","star":"2STAR","pattern":"MVRF","spec":"E3A","serie":"B6S7G0278","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4224264","kilos":5136.89,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR00091","gpc":"600010270001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0398","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4237087","kilos":5793.33,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RR00091","gpc":"600010270001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0411","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4237087","kilos":5793.33,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RR00091","gpc":"600010270001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0412","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4237087","kilos":5793.33,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0174","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"SUDU4877300","kilos":4906.77,"bodega":"BMSL","cliente":"CASERONES","mes":"MAYO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0175","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"SUDU4877300","kilos":4906.77,"bodega":"BMSL","cliente":"CASERONES","mes":"MAYO","anio":2026},{"code":"0RR00096","gpc":"600010275001","size":"53/80R63","star":"2STAR","pattern":"MREV","spec":"E2A","serie":"B6E7J0187","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"SUDU4877300","kilos":4906.77,"bodega":"BMSL","cliente":"GABY","mes":"JUNIO","anio":2026},{"code":"0RR00091","gpc":"600010270001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0349","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"SUDU9800235","kilos":5793.33,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RR00091","gpc":"600010270001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0350","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"SUDU9800235","kilos":5793.33,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RR00091","gpc":"600010270001","size":"59/80R63","star":"2STAR","pattern":"MREV","spec":"E3A","serie":"B6E7J0381","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"SUDU9800235","kilos":5793.33,"bodega":"BMSL","cliente":"SPENCE","mes":"ABRIL","anio":2026},{"code":"0RR09935","gpc":"600009863001","size":"1800R25","star":"3STAR","pattern":"VCHS","spec":"1DU","serie":"F6E483522","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":409.92,"bodega":"BMSL","cliente":"CHUQUICAMATA","mes":"JUNIO","anio":2026},{"code":"0RR09935","gpc":"600009863001","size":"1800R25","star":"3STAR","pattern":"VCHS","spec":"1DU","serie":"F6E483550","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":409.92,"bodega":"BMSL","cliente":"CHUQUICAMATA","mes":"JUNIO","anio":2026},{"code":"0RR09935","gpc":"600009863001","size":"1800R25","star":"3STAR","pattern":"VCHS","spec":"1DU","serie":"F6R184302","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":409.92,"bodega":"BMSL","cliente":"CHUQUICAMATA","mes":"JULIO","anio":2026},{"code":"0RR09935","gpc":"600009863001","size":"1800R25","star":"3STAR","pattern":"VCHS","spec":"1DU","serie":"F6R184303","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":409.92,"bodega":"BMSL","cliente":"CHUQUICAMATA","mes":"JULIO","anio":2026},{"code":"0RR04857","gpc":"600000949001","size":"295R25","star":"1STAR","pattern":"VSDL","spec":"D2A","serie":"S6E000945","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":917,"bodega":"BMSL","cliente":"SKC","mes":"MAYO","anio":2026},{"code":"0RR04857","gpc":"600000949001","size":"295R25","star":"1STAR","pattern":"VSDL","spec":"D2A","serie":"S6E001093","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":917,"bodega":"BMSL","cliente":"SKC","mes":"MAYO","anio":2026},{"code":"0RR04857","gpc":"600000949001","size":"295R25","star":"1STAR","pattern":"VSDL","spec":"D2A","serie":"S6E001095","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":917,"bodega":"BMSL","cliente":"SKC","mes":"MAYO","anio":2026},{"code":"0RR04857","gpc":"600000949001","size":"295R25","star":"1STAR","pattern":"VSDL","spec":"D2A","serie":"S6E001215","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":917,"bodega":"BMSL","cliente":"SKC","mes":"MAYO","anio":2026},{"code":"0RR06504","gpc":"600000203001","size":"35/65R33","star":"2STAR","pattern":"VSDL","spec":"D2A","serie":"S6EBT0183","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":1208.75,"bodega":"BMSL","cliente":"SKC","mes":"MAYO","anio":2026},{"code":"0RR06504","gpc":"600000203001","size":"35/65R33","star":"2STAR","pattern":"VSDL","spec":"D2A","serie":"S6EBT0192","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":1208.75,"bodega":"BMSL","cliente":"SKC","mes":"JUNIO","anio":2026},{"code":"0RR06504","gpc":"600000203001","size":"35/65R33","star":"2STAR","pattern":"VSDL","spec":"D2A","serie":"S6EBT0193","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":1208.75,"bodega":"BMSL","cliente":"SKC","mes":"MAYO","anio":2026},{"code":"0RR06504","gpc":"600000203001","size":"35/65R33","star":"2STAR","pattern":"VSDL","spec":"D2A","serie":"S6EBT0195","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":1208.75,"bodega":"BMSL","cliente":"SKC","mes":"MAYO","anio":2026},{"code":"0RR06504","gpc":"600000203001","size":"35/65R33","star":"2STAR","pattern":"VSDL","spec":"D2A","serie":"S6EBT0196","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":1208.75,"bodega":"BMSL","cliente":"SKC","mes":"JUNIO","anio":2026},{"code":"0RR06504","gpc":"600000203001","size":"35/65R33","star":"2STAR","pattern":"VSDL","spec":"D2A","serie":"S6EBT0213","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":1208.75,"bodega":"BMSL","cliente":"SKC","mes":"MAYO","anio":2026},{"code":"0RR06504","gpc":"600000203001","size":"35/65R33","star":"2STAR","pattern":"VSDL","spec":"D2A","serie":"S6EBT0219","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":1208.75,"bodega":"BMSL","cliente":"SKC","mes":"JUNIO","anio":2026},{"code":"0RR04046","gpc":"600001523001","size":"235R25","star":"1STAR","pattern":"VSDL","spec":"D2A","serie":"S6R000126","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"UETU6951333","kilos":533.57,"bodega":"BMSL","cliente":"ANDACOLLO","mes":"JUNIO","anio":2026},{"code":"0RR05905","gpc":"600008485001","size":"2700R49","star":"2STAR","pattern":"VRDP","spec":"E2A","serie":"S6ETN0015","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4234540","kilos":1398.55,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR05905","gpc":"600008485001","size":"2700R49","star":"2STAR","pattern":"VRDP","spec":"E2A","serie":"S6ETN0021","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4234540","kilos":1398.55,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026},{"code":"0RR05905","gpc":"600008485001","size":"2700R49","star":"2STAR","pattern":"VRDP","spec":"E2A","serie":"S6ETN0109","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4234540","kilos":1398.55,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"JUNIO","anio":2026},{"code":"0RR05905","gpc":"600008485001","size":"2700R49","star":"2STAR","pattern":"VRDP","spec":"E2A","serie":"S6ETN0111","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4234540","kilos":1398.55,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"JUNIO","anio":2026},{"code":"0RR05905","gpc":"600008485001","size":"2700R49","star":"2STAR","pattern":"VRDP","spec":"E2A","serie":"S6ETN0112","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4234540","kilos":1398.55,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"JUNIO","anio":2026},{"code":"0RR05905","gpc":"600008485001","size":"2700R49","star":"2STAR","pattern":"VRDP","spec":"E2A","serie":"S6ETN0113","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4234540","kilos":1398.55,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"JUNIO","anio":2026},{"code":"0RR05905","gpc":"600008485001","size":"2700R49","star":"2STAR","pattern":"VRDP","spec":"E2A","serie":"S6ETN0114","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4234540","kilos":1398.55,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"JUNIO","anio":2026},{"code":"0RR05905","gpc":"600008485001","size":"2700R49","star":"2STAR","pattern":"VRDP","spec":"E2A","serie":"S6ETN0116","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4234540","kilos":1398.55,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"JUNIO","anio":2026},{"code":"0RR07711","gpc":"600004598001","size":"45/65R45","star":"2STAR","pattern":"VSDL","spec":"D2A","serie":"S6R000544","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4234540","kilos":2465.15,"bodega":"BMSL","cliente":"FINNING","mes":"JUNIO","anio":2026},{"code":"0RR05905","gpc":"600008485001","size":"2700R49","star":"2STAR","pattern":"VRDP","spec":"E2A","serie":"S6STN0109","nave":"BS 17/26 PAG","eta":"2026-04-23","contenedor":"MAEU4234540","kilos":1398.55,"bodega":"BMSL","cliente":"ESCONDIDA","mes":"MAYO","anio":2026}];
+
+let filteredData = [...allData];
+let currentView = 'group';
+let sortCol = 'size';
+let sortAsc = true;
+let filterMes = '';
+let filterCliente = '';
+let filterSize = '';
+
+// ── INIT ──
+window.onload = () => {
+  populateData(allData);
+  setupUpload();
+};
+
+function populateData(data) {
+  allData = data;
+  filteredData = [...data];
+  filterMes = ''; filterCliente = ''; filterSize = '';
+
+  // Header meta
+  const eta = data[0]?.eta || '—';
+  const nave = data[0]?.nave || '—';
+  document.getElementById('hTotal').textContent = data.length;
+  document.getElementById('hEta').textContent = eta;
+  document.getElementById('hNave').textContent = nave;
+
+  // Fill selects
+  const clientes = [...new Set(data.map(d=>d.cliente))].sort();
+  const sizes = [...new Set(data.map(d=>d.size))].sort();
+  const cSel = document.getElementById('filterCliente');
+  const sSel = document.getElementById('filterSize');
+  cSel.innerHTML = '<option value="">— Todas —</option>' + clientes.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sSel.innerHTML = '<option value="">— Todas —</option>' + sizes.map(s=>`<option value="${s}">${s}</option>`).join('');
+
+  // Month chips — show only months present
+  const meses = [...new Set(data.map(d=>d.mes))];
+  document.querySelectorAll('.filter-chip[data-filter="mes"]').forEach(c=>{
+    const v = c.dataset.value;
+    if(!v) return;
+    c.style.display = meses.includes(v) ? '' : 'none';
+  });
+
+  document.getElementById('statsBar').style.display = 'grid';
+  document.getElementById('controls').style.display = 'block';
+  document.getElementById('emptyState').style.display = 'none';
+
+  setupChipFilters();
+  applyFilters();
+}
+
+function setupChipFilters() {
+  document.querySelectorAll('.filter-chip[data-filter="mes"]').forEach(chip => {
+    chip.onclick = () => {
+      document.querySelectorAll('.filter-chip[data-filter="mes"]').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      filterMes = chip.dataset.value;
+      applyFilters();
+    };
+  });
+  document.getElementById('filterCliente').onchange = e => { filterCliente = e.target.value; applyFilters(); };
+  document.getElementById('filterSize').onchange = e => { filterSize = e.target.value; applyFilters(); };
+}
+
+function resetFilters() {
+  filterMes = ''; filterCliente = ''; filterSize = '';
+  document.querySelectorAll('.filter-chip[data-filter="mes"]').forEach(c=>c.classList.remove('active'));
+  document.querySelector('.filter-chip[data-filter="mes"][data-value=""]').classList.add('active');
+  document.getElementById('filterCliente').value = '';
+  document.getElementById('filterSize').value = '';
+  applyFilters();
+}
+
+function applyFilters() {
+  filteredData = allData.filter(d => {
+    if(filterMes && d.mes !== filterMes) return false;
+    if(filterCliente && d.cliente !== filterCliente) return false;
+    if(filterSize && d.size !== filterSize) return false;
+    return true;
+  });
+  updateStats();
+  render();
+}
+
+function updateStats() {
+  const d = filteredData;
+  document.getElementById('sSizes').textContent = [...new Set(d.map(r=>r.size))].length;
+  document.getElementById('sPatterns').textContent = [...new Set(d.map(r=>r.pattern))].length;
+  document.getElementById('sClientes').textContent = [...new Set(d.map(r=>r.cliente))].length;
+  document.getElementById('sContainers').textContent = [...new Set(d.map(r=>r.contenedor))].length;
+}
+
+function setView(v) {
+  currentView = v;
+  document.querySelectorAll('.view-btn').forEach((b,i)=>{
+    b.classList.toggle('active', ['group','table','container'][i]===v);
+  });
+  render();
+}
+
+function render() {
+  document.getElementById('groupView').style.display = currentView==='group' ? 'block' : 'none';
+  document.getElementById('tableView').style.display = currentView==='table' ? 'block' : 'none';
+  document.getElementById('containerView').style.display = currentView==='container' ? 'block' : 'none';
+  if(currentView==='group') renderGroup();
+  else if(currentView==='table') renderTable();
+  else renderContainer();
+}
+
+// ── GROUP VIEW ──
+function renderGroup() {
+  const d = filteredData;
+  const bySize = {};
+  d.forEach(r => {
+    if(!bySize[r.size]) bySize[r.size] = {};
+    if(!bySize[r.size][r.pattern]) bySize[r.size][r.pattern] = {};
+    const key = r.cliente+'|||'+r.mes;
+    if(!bySize[r.size][r.pattern][key]) bySize[r.size][r.pattern][key] = {cliente:r.cliente,mes:r.mes,series:[],kilos:0};
+    bySize[r.size][r.pattern][key].series.push({s:r.serie,c:r.contenedor});
+    bySize[r.size][r.pattern][key].kilos += r.kilos;
+  });
+
+  const sizesSorted = Object.keys(bySize).sort((a,b)=>{
+    const cnt = s => d.filter(x=>x.size===s).length;
+    return cnt(b)-cnt(a);
+  });
+
+  const monthClass = m => (m||'').toLowerCase();
+
+  let html = '';
+  sizesSorted.forEach(size => {
+    const sizeItems = d.filter(x=>x.size===size);
+    const totalKg = sizeItems.reduce((s,r)=>s+r.kilos,0);
+    const id = 'sz_' + size.replace(/\//g,'_').replace(/\./g,'_');
+
+    html += `<div class="size-block">
+      <div class="size-header" onclick="toggleBlock('${id}')">
+        <span class="size-title">${size}</span>
+        <div class="size-meta">
+          <span class="chevron open" id="chev_${id}">▼</span>
+        </div>
+      </div>
+      <div class="size-body open" id="${id}">`;
+
+    const patterns = Object.keys(bySize[size]).sort((a,b)=>{
+      const cnt = p => sizeItems.filter(x=>x.pattern===p).length;
+      return cnt(b)-cnt(a);
+    });
+
+    patterns.forEach(pattern => {
+      const patItems = sizeItems.filter(x=>x.pattern===pattern);
+      const pid = id+'_'+pattern;
+      const monthsInPattern = [...new Set(patItems.map(x=>x.mes))];
+
+      html += `<div class="pattern-block">
+        <div class="pattern-header" onclick="toggleBlock('${pid}')">
+          <span class="pattern-label">${pattern}</span>
+          <span class="pattern-count">${patItems.length} neumáticos</span>
+          <span class="chevron open" style="margin-left:auto" id="chev_${pid}">▼</span>
+        </div>
+        <div class="pattern-body open" id="${pid}">
+          <div class="client-table">`;
+
+      // group by cliente+mes
+      const groups = bySize[size][pattern];
+      const groupsSorted = Object.values(groups).sort((a,b)=>{
+        const mo = {ABRIL:1,MAYO:2,JUNIO:3,JULIO:4};
+        return (mo[a.mes]||9)-(mo[b.mes]||9) || a.cliente.localeCompare(b.cliente);
+      });
+
+      groupsSorted.forEach(g => {
+        const seriesList = [...new Set(g.series.map(x=>x.s))].sort();
+        const MAX_SERIES = 6;
+        const visibles = seriesList.slice(0, MAX_SERIES);
+        const ocultas = seriesList.slice(MAX_SERIES);
+        const seriesHtml = visibles.map(s=>`<span class="serie-item">${s}</span>`).join('') +
+          (ocultas.length
+            ? `<span class="expand-series" data-extra='${JSON.stringify(ocultas)}'>+${ocultas.length}</span>`
+            : '');
+
+        html += `<div class="client-row">
+          <div class="cr-cliente">${g.cliente}</div>
+          <div class="cr-cant"><span class="qty-bubble">${g.series.length}</span></div>
+          <div class="cr-mes"><span class="mdot ${monthClass(g.mes)}">${g.mes}</span></div>
+          <div class="cr-series">${seriesHtml}</div>
+        </div>`;
+      });
+
+      html += `</div></div></div>`;
+    });
+
+    html += `</div></div>`;
+  });
+
+  document.getElementById('groupView').innerHTML = html;
+}
+
+function toggleBlock(id) {
+  const body = document.getElementById(id);
+  const chev = document.getElementById('chev_'+id);
+  if(!body) return;
+  const open = body.classList.toggle('open');
+  if(chev) chev.classList.toggle('open', open);
+}
+
+// ── TABLE VIEW ──
+let tableData = [];
+function renderTable() {
+  tableData = [...filteredData];
+  sortAndRenderTable();
+}
+
+function sortTable(col) {
+  if(sortCol===col) sortAsc=!sortAsc; else { sortCol=col; sortAsc=true; }
+  document.querySelectorAll('#mainTable thead th').forEach(th=>{
+    th.classList.remove('sorted');
+    const icon = th.querySelector('.sort-icon');
+    if(icon) icon.textContent='↕';
+  });
+  const headers = ['size','pattern','cliente','mes','serie','contenedor','kilos','spec'];
+  const idx = headers.indexOf(col);
+  const ths = document.querySelectorAll('#mainTable thead th');
+  if(ths[idx]) {
+    ths[idx].classList.add('sorted');
+    const icon = ths[idx].querySelector('.sort-icon');
+    if(icon) icon.textContent = sortAsc ? '↑' : '↓';
+  }
+  sortAndRenderTable();
+}
+
+function sortAndRenderTable() {
+  const mo = {ABRIL:1,MAYO:2,JUNIO:3,JULIO:4};
+  tableData.sort((a,b)=>{
+    let av = a[sortCol], bv = b[sortCol];
+    if(sortCol==='mes'){av=mo[av]||9; bv=mo[bv]||9;}
+    if(typeof av==='number') return sortAsc? av-bv : bv-av;
+    return sortAsc? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+  });
+
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = tableData.map(r=>`<tr>
+    <td><span class="tag tag-size">${r.size}</span></td>
+    <td><span class="tag tag-pattern">${r.pattern}</span></td>
+    <td class="client-name">${r.cliente}</td>
+    <td class="center"><span class="tag tag-${r.mes.toLowerCase()}">${r.mes}</span></td>
+    <td class="mono">${r.serie}</td>
+    <td class="mono">${r.contenedor}</td>
+    <td class="center mono">${r.kilos.toLocaleString('es-CL')}</td>
+    <td class="mono">${r.spec}</td>
+  </tr>`).join('');
+}
+
+// ── CONTAINER VIEW ──
+function renderContainer() {
+  const d = filteredData;
+  const byContainer = {};
+  d.forEach(r=>{
+    if(!byContainer[r.contenedor]) byContainer[r.contenedor] = [];
+    byContainer[r.contenedor].push(r);
+  });
+
+  const sorted = Object.entries(byContainer).sort((a,b)=>b[1].length-a[1].length);
+  const monthClass = m => (m||'').toLowerCase();
+
+  let html = '<div class="container-grid">';
+  sorted.forEach(([cont, items])=>{
+    const sizes = [...new Set(items.map(i=>i.size))];
+    html += `<div class="container-card">
+      <div class="container-card-header">
+        <span class="container-id">📦 ${cont}</span>
+        <span class="container-count">${items.length} unid.</span>
+      </div>
+      <div class="container-items">
+        ${items.map(i=>`<div class="container-item">
+          <div>
+            <div style="font-weight:600;font-size:12px;color:var(--text)">${i.cliente}</div>
+            <div class="ci-left">${i.size} · <span style="color:var(--accent)">${i.pattern}</span></div>
+          </div>
+          <div style="text-align:right">
+            <div class="ci-serie">${i.serie}</div>
+            <span class="mdot ${monthClass(i.mes)}" style="font-size:9px;padding:1px 5px">${i.mes}</span>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+  document.getElementById('containerView').innerHTML = html;
+}
+
+// ── EXPAND SERIES ──
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.expand-series');
+  if (!btn) return;
+  const extra = JSON.parse(btn.dataset.extra || '[]');
+  extra.forEach(s => {
+    const chip = document.createElement('span');
+    chip.className = 'serie-item';
+    chip.textContent = s;
+    btn.parentElement.insertBefore(chip, btn);
+  });
+  btn.remove();
+});
+
+// ── UPLOAD ──
+function setupUpload() {
+  const zone = document.getElementById('uploadZone');
+  const input = document.getElementById('fileInput');
+
+  zone.addEventListener('dragover', e=>{ e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', ()=>zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e=>{ e.preventDefault(); zone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+  input.addEventListener('change', e=>handleFile(e.target.files[0]));
+}
+
+function handleFile(file) {
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      const header = rows[0].map(h=>String(h).toLowerCase().trim());
+
+      // Auto-detect columns
+      const col = name => {
+        const aliases = {
+          code:['code','codigo'], gpc:['gpc'], size:['size','medida','talla'],
+          star:['star'], pattern:['pattern','banda'], spec:['spec'],
+          serie:['series','serie','serial'], nave:['nave','vessel','ship'],
+          eta:['eta','fecha eta','arrival'], contenedor:['contenedor','container'],
+          kilos:['kilos netos','kilos','kg','weight'], bodega:['bodega'],
+          cliente:['cliente final','cliente','customer'], mes:['mes ','mes','month'],
+          anio:['año','anio','year']
+        };
+        const al = aliases[name] || [name];
+        for(let a of al) {
+          const i = header.findIndex(h=>h.includes(a));
+          if(i>=0) return i;
+        }
+        return -1;
+      };
+
+      const cols = {};
+      ['code','gpc','size','star','pattern','spec','serie','nave','eta','contenedor','kilos','bodega','cliente','mes','anio'].forEach(n=>cols[n]=col(n));
+
+      const data = rows.slice(1).filter(r=>r[cols.size]).map(r=>{
+        let etaVal = r[cols.eta];
+        let etaStr = '';
+        if(etaVal instanceof Date) etaStr = etaVal.toISOString().slice(0,10);
+        else if(typeof etaVal==='number') {
+          const d = new Date((etaVal-25569)*86400000);
+          etaStr = d.toISOString().slice(0,10);
+        } else etaStr = String(etaVal||'');
+
+        return {
+          code: r[cols.code]||'', gpc: String(r[cols.gpc]||''),
+          size: r[cols.size]||'', star: r[cols.star]||'',
+          pattern: r[cols.pattern]||'', spec: r[cols.spec]||'',
+          serie: r[cols.serie]||'', nave: r[cols.nave]||'',
+          eta: etaStr, contenedor: r[cols.contenedor]||'',
+          kilos: parseFloat(r[cols.kilos])||0, bodega: r[cols.bodega]||'',
+          cliente: r[cols.cliente]||'', mes: String(r[cols.mes]||'').trim().toUpperCase(),
+          anio: parseInt(r[cols.anio])||0
+        };
+      }).filter(r=>r.size && r.cliente);
+
+      if(!data.length) { alert('No se encontraron datos válidos en el archivo.'); return; }
+      populateData(data);
+    } catch(err) {
+      alert('Error al leer el archivo: '+err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+</script>
+</body>
+</html>
